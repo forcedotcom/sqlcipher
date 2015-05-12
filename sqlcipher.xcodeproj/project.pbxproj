@@ -160,7 +160,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "./configure --enable-tempstore=yes --with-crypto-lib=commoncrypto CFLAGS=\"-DSQLITE_HAS_CODEC -DSQLITE_TEMP_STORE=2\"\nmake sqlite3.c\nexit 0";
+			shellScript = "./configure --enable-tempstore=yes --with-crypto-lib=commoncrypto CFLAGS=\"-DSQLITE_HAS_CODEC -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_TEMP_STORE=2\"\nmake sqlite3.c\nexit 0";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -197,6 +197,8 @@
 				INSTALL_PATH = /usr/local/lib;
 				OTHER_CFLAGS = (
 					"-DSQLITE_HAS_CODEC",
+					"-DSQLITE_ENABLE_FTS3",
+					"-DSQLITE_ENABLE_FTS3_PARENTHESIS",
 					"-DSQLITE_TEMP_STORE=2",
 					"-DSQLITE_THREADSAFE",
 					"-DSQLCIPHER_CRYPTO_CC",
@@ -204,6 +206,8 @@
 				"OTHER_CFLAGS[arch=armv6]" = (
 					"-mno-thumb",
 					"-DSQLITE_HAS_CODEC",
+					"-DSQLITE_ENABLE_FTS3",
+					"-DSQLITE_ENABLE_FTS3_PARENTHESIS",
 					"-DSQLITE_TEMP_STORE=2",
 					"-DSQLITE_THREADSAFE",
 					"-DSQLCIPHER_CRYPTO_CC",
@@ -224,6 +228,8 @@
 				INSTALL_PATH = /usr/local/lib;
 				OTHER_CFLAGS = (
 					"-DSQLITE_HAS_CODEC",
+					"-DSQLITE_ENABLE_FTS3",
+					"-DSQLITE_ENABLE_FTS3_PARENTHESIS",
 					"-DNDEBUG",
 					"-DSQLITE_OS_UNIX=1",
 					"-DSQLITE_TEMP_STORE=2",
@@ -233,6 +239,8 @@
 				"OTHER_CFLAGS[arch=armv6]" = (
 					"-mno-thumb",
 					"-DSQLITE_HAS_CODEC",
+					"-DSQLITE_ENABLE_FTS3",
+					"-DSQLITE_ENABLE_FTS3_PARENTHESIS",
 					"-DNDEBUG",
 					"-DSQLITE_OS_UNIX=1",
 					"-DSQLITE_TEMP_STORE=2",
