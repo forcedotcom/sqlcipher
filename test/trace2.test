@@ -128,6 +128,7 @@ ifcapable fts3 {
     INSERT INTO x1 VALUES('North northwest wind between 8 and 14 mph');
   } {
     "INSERT INTO x1 VALUES('North northwest wind between 8 and 14 mph');" 
+    "-- DELETE FROM 'main'.'x1_segdir' WHERE level = ?"
     "-- INSERT INTO 'main'.'x1_content' VALUES(?,(?))" 
     "-- REPLACE INTO 'main'.'x1_docsize' VALUES(?,?)" 
     "-- SELECT value FROM 'main'.'x1_stat' WHERE id=?" 
@@ -135,6 +136,7 @@ ifcapable fts3 {
     "-- SELECT (SELECT max(idx) FROM 'main'.'x1_segdir' WHERE level = ?) + 1" 
     "-- SELECT coalesce((SELECT max(blockid) FROM 'main'.'x1_segments') + 1, 1)"
     "-- REPLACE INTO 'main'.'x1_segdir' VALUES(?,?,?,?,?,?)"
+    "-- SELECT level, idx, end_block FROM 'main'.'x1_segdir' WHERE level BETWEEN ? AND ? ORDER BY level DESC, idx ASC"
   }
 
   do_trace_test 2.3 {

@@ -23,7 +23,7 @@
 #
 
 # Begin by reading the "sqlite3.h" header file.  Extract the version number
-# from in this file.  The versioon number is needed to generate the header
+# from in this file.  The version number is needed to generate the header
 # comment of the amalgamation.
 #
 if {[lsearch $argv --nostatic]>=0} {
@@ -92,6 +92,7 @@ if {$addstatic} {
 #
 foreach hdr {
    crypto.h
+   sqlcipher.h
    btree.h
    btreeInt.h
    fts3.h
@@ -101,11 +102,13 @@ foreach hdr {
    hash.h
    hwtime.h
    keywordhash.h
+   msvc.h
    mutex.h
    opcodes.h
    os_common.h
+   os_setup.h
+   os_win.h
    os.h
-   os_os2.h
    pager.h
    parse.h
    pcache.h
@@ -118,6 +121,7 @@ foreach hdr {
    vdbe.h
    vdbeInt.h
    wal.h
+   whereInt.h
 } {
   set available_hdr($hdr) 1
 }
@@ -139,7 +143,7 @@ proc section_comment {text} {
 
 # Read the source file named $filename and write it into the
 # sqlite3.c output file.  If any #include statements are seen,
-# process them approprately.
+# process them appropriately.
 #
 proc copy_file {filename} {
   global seen_hdr available_hdr out addstatic linemacros
@@ -169,10 +173,18 @@ proc copy_file {filename} {
           if {$linemacros} {puts $out "#line [expr {$ln+1}] \"$filename\""}
         }
       } elseif {![info exists seen_hdr($hdr)]} {
-        set seen_hdr($hdr) 1
+        if {![regexp {/\*\s+amalgamator:\s+dontcache\s+\*/} $line]} {
+          set seen_hdr($hdr) 1
+        }
+        puts $out $line
+      } elseif {[regexp {/\*\s+amalgamator:\s+keep\s+\*/} $line]} {
+        # This include file must be kept because there was a "keep"
+        # directive inside of a line comment.
         puts $out $line
       } else {
-        puts $out "/* $line */"
+        # Comment out the entire line, replacing any nested comment
+        # begin/end markers with the harmless substring "**".
+        puts $out "/* [string map [list /* ** */ **] $line] */"
       }
     } elseif {[regexp {^#ifdef __cplusplus} $line]} {
       puts $out "#if 0"
@@ -203,7 +215,7 @@ proc copy_file {filename} {
         }
       } elseif {[regexp {^(SQLITE_EXTERN )?void \(\*sqlite3IoTrace\)} $line]} {
         regsub {^SQLITE_EXTERN } $line {} line
-        puts $out "SQLITE_PRIVATE $line"
+        puts $out $line
       } elseif {[regexp {^void \(\*sqlite3Os} $line]} {
         puts $out "SQLITE_PRIVATE $line"
       } else {
@@ -222,11 +234,15 @@ proc copy_file {filename} {
 # used subroutines first in order to help the compiler find
 # inlining opportunities.
 #
+
 foreach file {
    sqliteInt.h
 
    crypto.c
    crypto_impl.c
+   crypto_libtomcrypt.c
+   crypto_openssl.c
+   crypto_cc.c
 
    global.c
    ctime.c
@@ -242,18 +258,17 @@ foreach file {
    mem5.c
    mutex.c
    mutex_noop.c
-   mutex_os2.c
    mutex_unix.c
    mutex_w32.c
    malloc.c
    printf.c
    random.c
+   threads.c
    utf.c
    util.c
    hash.c
    opcodes.c
 
-   os_os2.c
    os_unix.c
    os_win.c
 
@@ -318,8 +333,11 @@ foreach file {
    fts3_porter.c
    fts3_tokenizer.c
    fts3_tokenizer1.c
+   fts3_tokenize_vtab.c
    fts3_write.c
    fts3_snippet.c
+   fts3_unicode.c
+   fts3_unicode2.c
 
    rtree.c
    icu.c

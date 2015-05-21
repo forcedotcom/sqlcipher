@@ -30,15 +30,25 @@
 ** SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **  
 */
-/* BEGIN CRYPTO */
+/* BEGIN SQLCIPHER */
 #ifdef SQLITE_HAS_CODEC
 #ifndef CRYPTO_H
 #define CRYPTO_H
 
+#if !defined (SQLCIPHER_CRYPTO_CC) \
+   && !defined (SQLCIPHER_CRYPTO_LIBTOMCRYPT) \
+   && !defined (SQLCIPHER_CRYPTO_OPENSSL)
+#define SQLCIPHER_CRYPTO_OPENSSL
+#endif
+
 #define FILE_HEADER_SZ 16
 
 #ifndef CIPHER_VERSION
-#define CIPHER_VERSION "2.0.5"
+#ifdef SQLCIPHER_FIPS
+#define CIPHER_VERSION "3.3.0 FIPS"
+#else
+#define CIPHER_VERSION "3.3.0"
+#endif
 #endif
 
 #ifndef CIPHER
@@ -53,12 +63,18 @@
 #define CIPHER_READWRITE_CTX 2
 
 #ifndef PBKDF2_ITER
-#define PBKDF2_ITER 4000
+#define PBKDF2_ITER 64000
 #endif
 
-#ifndef DEFAULT_USE_HMAC
-#define DEFAULT_USE_HMAC 1
+/* possible flags for cipher_ctx->flags */
+#define CIPHER_FLAG_HMAC          0x01
+#define CIPHER_FLAG_LE_PGNO       0x02
+#define CIPHER_FLAG_BE_PGNO       0x04
+
+#ifndef DEFAULT_CIPHER_FLAGS
+#define DEFAULT_CIPHER_FLAGS CIPHER_FLAG_HMAC | CIPHER_FLAG_LE_PGNO
 #endif
+
 
 /* by default, sqlcipher will use a reduced number of iterations to generate
    the HMAC key / or transform a raw cipher key 
@@ -76,12 +92,36 @@
 #define HMAC_SALT_MASK 0x3a
 #endif
 
+#ifndef CIPHER_MAX_IV_SZ
+#define CIPHER_MAX_IV_SZ 16
+#endif
+
+#ifndef CIPHER_MAX_KEY_SZ
+#define CIPHER_MAX_KEY_SZ 64
+#endif
+
+
 #ifdef CODEC_DEBUG
 #define CODEC_TRACE(X)  {printf X;fflush(stdout);}
 #else
 #define CODEC_TRACE(X)
 #endif
 
+#ifdef CODEC_DEBUG_PAGEDATA
+#define CODEC_HEXDUMP(DESC,BUFFER,LEN)  \
+  { \
+    int __pctr; \
+    printf(DESC); \
+    for(__pctr=0; __pctr < LEN; __pctr++) { \
+      if(__pctr % 16 == 0) printf("\n%05x: ",__pctr); \
+      printf("%02x ",((unsigned char*) BUFFER)[__pctr]); \
+    } \
+    printf("\n"); \
+    fflush(stdout); \
+  }
+#else
+#define CODEC_HEXDUMP(DESC,BUFFER,LEN)
+#endif
 
 /* extensions defined in pager.c */ 
 void sqlite3pager_get_codec(Pager *pPager, void **ctx);
@@ -106,24 +146,26 @@ static int cipher_hex2int(char c) {
          (c>='a' && c<='f') ? (c)-'a'+10 : 0;
 }
 
-static void cipher_hex2bin(const char *hex, int sz, unsigned char *out){
+static void cipher_hex2bin(const unsigned char *hex, int sz, unsigned char *out){
   int i;
   for(i = 0; i < sz; i += 2){
     out[i/2] = (cipher_hex2int(hex[i])<<4) | cipher_hex2int(hex[i+1]);
   }
 }
 
+static void cipher_bin2hex(const unsigned char* in, int sz, char *out) {
+    int i;
+    for(i=0; i < sz; i++) {
+      sqlite3_snprintf(3, out + (i*2), "%02x ", in[i]);
+    } 
+}
+
 /* extensions defined in crypto_impl.c */
-
 typedef struct codec_ctx codec_ctx;
-
-/* utility functions */
-int sqlcipher_memcmp(const unsigned char *a0, const unsigned char *a1, int len);
-int sqlcipher_pseudorandom(void *, int);
-void sqlcipher_free(void *, int);
 
 /* activation and initialization */
 void sqlcipher_activate();
+void sqlcipher_deactivate();
 int sqlcipher_codec_ctx_init(codec_ctx **, Db *, Pager *, sqlite3_file *, const void *, int);
 void sqlcipher_codec_ctx_free(codec_ctx **);
 int sqlcipher_codec_key_derive(codec_ctx *);
@@ -136,28 +178,56 @@ int sqlcipher_page_cipher(codec_ctx *, int, Pgno, int, int, unsigned char *, uns
 void sqlcipher_codec_ctx_set_error(codec_ctx *, int);
 
 int sqlcipher_codec_ctx_set_pass(codec_ctx *, const void *, int, int);
-void sqlcipher_codec_get_pass(codec_ctx *, void **zKey, int *nKey);
+void sqlcipher_codec_get_keyspec(codec_ctx *, void **zKey, int *nKey);
 
 int sqlcipher_codec_ctx_set_pagesize(codec_ctx *, int);
 int sqlcipher_codec_ctx_get_pagesize(codec_ctx *);
 int sqlcipher_codec_ctx_get_reservesize(codec_ctx *);
 
+void sqlcipher_set_default_pagesize(int page_size);
+int sqlcipher_get_default_pagesize();
+
+void sqlcipher_set_default_kdf_iter(int iter);
+int sqlcipher_get_default_kdf_iter();
+
 int sqlcipher_codec_ctx_set_kdf_iter(codec_ctx *, int, int);
+int sqlcipher_codec_ctx_get_kdf_iter(codec_ctx *ctx, int);
+
 void* sqlcipher_codec_ctx_get_kdf_salt(codec_ctx *ctx);
 
 int sqlcipher_codec_ctx_set_fast_kdf_iter(codec_ctx *, int, int);
+int sqlcipher_codec_ctx_get_fast_kdf_iter(codec_ctx *, int);
 
 int sqlcipher_codec_ctx_set_cipher(codec_ctx *, const char *, int);
+const char* sqlcipher_codec_ctx_get_cipher(codec_ctx *ctx, int for_ctx);
 
 void* sqlcipher_codec_ctx_get_data(codec_ctx *);
 
 void sqlcipher_exportFunc(sqlite3_context *, int, sqlite3_value **);
 
 void sqlcipher_set_default_use_hmac(int use);
+int sqlcipher_get_default_use_hmac();
+
+void sqlcipher_set_hmac_salt_mask(unsigned char mask);
+unsigned char sqlcipher_get_hmac_salt_mask();
 
 int sqlcipher_codec_ctx_set_use_hmac(codec_ctx *ctx, int use);
-/* end extensions defined in crypto_impl.c */
+int sqlcipher_codec_ctx_get_use_hmac(codec_ctx *ctx, int for_ctx);
+
+int sqlcipher_codec_ctx_set_flag(codec_ctx *ctx, unsigned int flag);
+int sqlcipher_codec_ctx_unset_flag(codec_ctx *ctx, unsigned int flag);
+int sqlcipher_codec_ctx_get_flag(codec_ctx *ctx, unsigned int flag, int for_ctx);
+
+const char* sqlcipher_codec_get_cipher_provider(codec_ctx *ctx);
+int sqlcipher_codec_ctx_migrate(codec_ctx *ctx);
+int sqlcipher_codec_add_random(codec_ctx *ctx, const char *data, int random_sz);
+int sqlcipher_cipher_profile(sqlite3 *db, const char *destination);
+static void sqlcipher_profile_callback(void *file, const char *sql, sqlite3_uint64 run_time);
+static int sqlcipher_codec_get_store_pass(codec_ctx *ctx);
+static void sqlcipher_codec_get_pass(codec_ctx *ctx, void **zKey, int *nKey);
+static void sqlcipher_codec_set_store_pass(codec_ctx *ctx, int value);
+int sqlcipher_codec_fips_status(codec_ctx *ctx);
 
 #endif
 #endif
-/* END CRYPTO */
+/* END SQLCIPHER */

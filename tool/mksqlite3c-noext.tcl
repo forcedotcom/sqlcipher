@@ -96,11 +96,13 @@ foreach hdr {
    hash.h
    hwtime.h
    keywordhash.h
+   msvc.h
    mutex.h
    opcodes.h
    os_common.h
+   os_setup.h
+   os_win.h
    os.h
-   os_os2.h
    pager.h
    parse.h
    pcache.h
@@ -233,18 +235,17 @@ foreach file {
    mem5.c
    mutex.c
    mutex_noop.c
-   mutex_os2.c
    mutex_unix.c
    mutex_w32.c
    malloc.c
    printf.c
    random.c
+   threads.c
    utf.c
    util.c
    hash.c
    opcodes.c
 
-   os_os2.c
    os_unix.c
    os_win.c
 
