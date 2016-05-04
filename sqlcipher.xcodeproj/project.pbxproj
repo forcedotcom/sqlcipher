@@ -424,7 +424,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "./configure --enable-tempstore=yes --with-crypto-lib=commoncrypto CFLAGS=\"-DSQLITE_HAS_CODEC -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_TEMP_STORE=2\"\nmake sqlite3.c\nexit 0";
+			shellScript = "./configure --enable-tempstore=yes --with-crypto-lib=commoncrypto CFLAGS=\"-DSQLITE_HAS_CODEC -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_TEMP_STORE=2  -DSQLITE_SOUNDEX -DSQLITE_THREADSAFE -DSQLITE_ENABLE_RTREE -DSQLITE_ENABLE_STAT3 -DSQLITE_ENABLE_STAT4 -DSQLITE_ENABLE_COLUMN_METADATA -DSQLITE_ENABLE_MEMORY_MANAGEMENT -DSQLITE_ENABLE_LOAD_EXTENSION -DSQLITE_ENABLE_UNLOCK_NOTIFY -DSQLITE_ENABLE_FTS4_UNICODE61 -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_FTS5\"\nmake sqlite3.c\nexit 0";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -518,6 +518,18 @@
 					"-DSQLITE_TEMP_STORE=2",
 					"-DSQLITE_THREADSAFE",
 					"-DSQLCIPHER_CRYPTO_CC",
+                    "-DNDEBUG",
+                    "-DSQLITE_SOUNDEX",
+                    "-DSQLITE_ENABLE_RTREE",
+                    "-DSQLITE_ENABLE_STAT3",
+                    "-DSQLITE_ENABLE_STAT4",
+                    "-DSQLITE_ENABLE_COLUMN_METADATA",
+                    "-DSQLITE_ENABLE_MEMORY_MANAGEMENT",
+                    "-DSQLITE_ENABLE_LOAD_EXTENSION",
+                    "-DSQLITE_ENABLE_FTS4_UNICODE61",
+                    "-DSQLITE_ENABLE_UNLOCK_NOTIFY",
+                    "-DSQLITE_ENABLE_JSON1",
+                    "-DSQLITE_ENABLE_FTS5",
 				);
 				"OTHER_CFLAGS[arch=armv6]" = (
 					"-mno-thumb",
@@ -527,6 +539,18 @@
 					"-DSQLITE_TEMP_STORE=2",
 					"-DSQLITE_THREADSAFE",
 					"-DSQLCIPHER_CRYPTO_CC",
+                    "-DNDEBUG",
+                    "-DSQLITE_SOUNDEX",
+                    "-DSQLITE_ENABLE_RTREE",
+                    "-DSQLITE_ENABLE_STAT3",
+                    "-DSQLITE_ENABLE_STAT4",
+                    "-DSQLITE_ENABLE_COLUMN_METADATA",
+                    "-DSQLITE_ENABLE_MEMORY_MANAGEMENT",
+                    "-DSQLITE_ENABLE_LOAD_EXTENSION",
+                    "-DSQLITE_ENABLE_FTS4_UNICODE61",
+                    "-DSQLITE_ENABLE_UNLOCK_NOTIFY",
+                    "-DSQLITE_ENABLE_JSON1",
+                    "-DSQLITE_ENABLE_FTS5",
 				);
 				OTHER_LDFLAGS = "";
 				PRODUCT_NAME = sqlcipher;
@@ -551,16 +575,39 @@
 					"-DSQLITE_TEMP_STORE=2",
 					"-DSQLITE_THREADSAFE",
 					"-DSQLCIPHER_CRYPTO_CC",
+                    "-DSQLITE_SOUNDEX",
+                    "-DSQLITE_ENABLE_RTREE",
+                    "-DSQLITE_ENABLE_STAT3",
+                    "-DSQLITE_ENABLE_STAT4",
+                    "-DSQLITE_ENABLE_COLUMN_METADATA",
+                    "-DSQLITE_ENABLE_MEMORY_MANAGEMENT",
+                    "-DSQLITE_ENABLE_LOAD_EXTENSION",
+                    "-DSQLITE_ENABLE_FTS4_UNICODE61",
+                    "-DSQLITE_ENABLE_UNLOCK_NOTIFY",
+                    "-DSQLITE_ENABLE_JSON1",
+                    "-DSQLITE_ENABLE_FTS5",
 				);
 				"OTHER_CFLAGS[arch=armv6]" = (
 					"-mno-thumb",
 					"-DSQLITE_HAS_CODEC",
-					"-DSQLITE_ENABLE_FTS3",
+					"-DSQLITE_ENABLE_FTS4",
+					"-DSQLITE_ENABLE_FTS3_PARENTHESIS",
 					"-DNDEBUG",
 					"-DSQLITE_OS_UNIX=1",
 					"-DSQLITE_TEMP_STORE=2",
 					"-DSQLITE_THREADSAFE",
 					"-DSQLCIPHER_CRYPTO_CC",
+                    "-DSQLITE_SOUNDEX",
+                    "-DSQLITE_ENABLE_RTREE",
+                    "-DSQLITE_ENABLE_STAT3",
+                    "-DSQLITE_ENABLE_STAT4",
+                    "-DSQLITE_ENABLE_COLUMN_METADATA",
+                    "-DSQLITE_ENABLE_MEMORY_MANAGEMENT",
+                    "-DSQLITE_ENABLE_LOAD_EXTENSION",
+                    "-DSQLITE_ENABLE_FTS4_UNICODE61",
+                    "-DSQLITE_ENABLE_UNLOCK_NOTIFY",
+                    "-DSQLITE_ENABLE_JSON1",
+                    "-DSQLITE_ENABLE_FTS5",
 				);
 				OTHER_LDFLAGS = "";
 				PRODUCT_NAME = sqlcipher;
