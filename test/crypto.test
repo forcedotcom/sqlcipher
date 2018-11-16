@@ -39,9 +39,10 @@ file delete -force test.db
 file delete -force test2.db
 file delete -force test3.db
 file delete -force test4.db
-
+                          
 set testdir [file dirname $argv0]
 source $testdir/tester.tcl
+set sampleDir [file normalize [file dirname [file dirname $argv0]]]
 set old_pending_byte [sqlite3_test_control_pending_byte 0x40000000]
 
 # If the library is not compiled with has_codec support then
@@ -102,6 +103,11 @@ proc cmpFilesChunked {file1 file2 {chunksize 16384}} {
     return 0
 }
 
+proc trace_proc sql {
+  global TRACE_OUT
+  lappend TRACE_OUT [string trim $sql]
+}
+
 # The database is initially empty.
 # set an hex key create some basic data
 # create table and insert operations should work
@@ -147,7 +153,7 @@ do_test wont-open-without-key {
   catchsql {
     SELECT name FROM sqlite_master WHERE type='table';
   }
-} {1 {file is encrypted or is not a database}}
+} {1 {file is not a database}}
 db close
 file delete -force test.db
 
@@ -161,7 +167,7 @@ do_test wont-open-with-invalid-derived-key {
     PRAGMA key = 'testkey2';
     SELECT name FROM sqlite_master WHERE type='table';
   }
-} {1 {file is encrypted or is not a database}}
+} {1 {file is not a database}}
 db close
 file delete -force test.db
 
@@ -175,7 +181,7 @@ do_test wont-open-with-invalid-raw-key {
     PRAGMA key = "x'98483C6EB40B6C31A448C22A66DED3B5E5E8D5119CAC8327B655C8B5C4836480'";
     SELECT name FROM sqlite_master WHERE type='table';
   }
-} {1 {file is encrypted or is not a database}}
+} {1 {file is not a database}}
 db close
 file delete -force test.db
 
@@ -439,7 +445,7 @@ do_test attach-database-with-default-key {
     ATTACH 'test.db' AS db;
   } db2
     
-} {1 {file is encrypted or is not a database}}
+} {1 {file is not a database}}
 db2 close
 file delete -force test.db
 file delete -force test2.db
@@ -614,7 +620,7 @@ do_test non-standard-kdf-and-ciphers {
     SELECT count(*) FROM t1;
   } 
 
-} {2}
+} {{PRAGMA cipher command is deprecated, please remove from usage.} 2}
 db close
 file delete -force test.db
 
@@ -649,7 +655,7 @@ do_test rekey-from-cbc-to-ecb-no-iv {
     SELECT count(*) FROM t1;
   } 
 
-} {1001}
+} {{PRAGMA cipher command is deprecated, please remove from usage.} 1001}
 db close
 file delete -force test.db
 
@@ -906,7 +912,7 @@ do_test custom-pagesize-must-match {
     PRAGMA key = 'testkey';
     SELECT name FROM sqlite_master WHERE type='table';
   }
-} {1 {file is encrypted or is not a database}}
+} {1 {file is not a database}}
 db close
 file delete -force test.db
 
@@ -944,7 +950,7 @@ do_test hmac-tamper-resistence {
     SELECT count(*) FROM t1;
   }
 
-} {1 {file is encrypted or is not a database}}
+} {1 {file is not a database}}
 db close
 file delete -force test.db
 
@@ -991,7 +997,7 @@ file delete -force test.db
 
 # open a 1.1.8 database using the new code, HMAC disabled
 do_test open-1.1.8-database {
-  file copy -force sqlcipher-1.1.8-testkey.db test.db
+  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db test.db
   sqlite_orig db test.db
   execsql {
     PRAGMA key = 'testkey';
@@ -1006,8 +1012,8 @@ file delete -force test.db
 
 # open a 1.1.8 database without hmac, then copy the data
 do_test attach-and-copy-1.1.8 {
-  sqlite_orig db sqlcipher-1.1.8-testkey.db
-
+  sqlite_orig db $sampleDir/sqlcipher-1.1.8-testkey.db
+  
   execsql {
     PRAGMA key = 'testkey';
     PRAGMA cipher_use_hmac = OFF;
@@ -1069,7 +1075,7 @@ do_test attached-database-pragmas {
     PRAGMA cipher_use_hmac = OFF;
     SELECT count(*) FROM t1;
   }
-} {1000}
+} {{PRAGMA cipher command is deprecated, please remove from usage.} 1000}
 db close
 file delete -force test.db
 file delete -force test2.db
@@ -1271,7 +1277,7 @@ do_test multiple-key-calls-safe-2 {
     PRAGMA key = 'wrong key'; 
     SELECT name FROM sqlite_master WHERE type='table';
   }
-} {1 {file is encrypted or is not a database}}
+} {1 {file is not a database}}
 
 do_test multiple-key-calls-safe-3 {
   execsql {
@@ -1329,7 +1335,7 @@ do_test custom-hmac-kdf-iter-must-match {
     PRAGMA key = 'testkey';
     SELECT name FROM sqlite_master WHERE type='table';
   }
-} {1 {file is encrypted or is not a database}}
+} {1 {file is not a database}}
 db close
 file delete -force test.db
 
@@ -1474,7 +1480,8 @@ file delete -force test.db
 # attached database should have the same hmac
 # setting as the original 
 do_test default-hmac-kdf-attach {
-  file copy -force sqlcipher-1.1.8-testkey.db test.db
+  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db test.db
+  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db sqlcipher-1.1.8-testkey.db;
   sqlite_orig db test.db
   execsql {
     PRAGMA cipher_default_use_hmac = OFF;
@@ -1489,21 +1496,24 @@ do_test default-hmac-kdf-attach {
 } {75709 75709}
 db close
 file delete -force test.db
+file delete -force sqlcipher-1.1.8-testkey.db
 
 # open a 2.0 database (with HMAC), then 
 # try to a 1.1.8 database. this should 
 # fail because the hmac setting for the 
 # attached database is not compatible
 do_test attach-1.1.8-database-from-2.0-fails {
+  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db sqlcipher-1.1.8-testkey.db;
   sqlite_orig db test.db
   catchsql {
     PRAGMA key = 'testkey';
     CREATE table t1(a,b);
     ATTACH 'sqlcipher-1.1.8-testkey.db' AS db2 KEY 'testkey';
   } 
-} {1 {file is encrypted or is not a database}}
+} {1 {file is not a database}}
 db close
 file delete -force test.db
+file delete -force sqlcipher-1.1.8-testkey.db
 
 # open a 2.0 database (with HMAC, 4k iter), then 
 # set the default hmac setting to OFF.
@@ -1511,6 +1521,7 @@ file delete -force test.db
 # succeed now that hmac is off by default
 # before the attach
 do_test change-default-hmac-kdf-attach {
+  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db sqlcipher-1.1.8-testkey.db;
   sqlite_orig db test.db
   execsql {
     PRAGMA key = 'testkey';
@@ -1532,6 +1543,7 @@ do_test change-default-hmac-kdf-attach {
 } {1 75709}
 db close
 file delete -force test.db
+file delete -force sqlcipher-1.1.8-testkey.db
 
 # verify the pragma cipher_version
 # returns the currently configured
@@ -1541,7 +1553,7 @@ do_test verify-pragma-cipher-version {
     execsql {
         PRAGMA cipher_version;
     }
-} {3.3.1}
+} {3.4.2}
 db close
 file delete -force test.db
 
@@ -1706,7 +1718,7 @@ file delete -force test.db
 # open a 3.0 database with little endian hmac page numbers (default)
 # verify it can be opened
 do_test open-3.0-le-database {
-  sqlite_orig db sqlcipher-3.0-testkey.db
+  sqlite_orig db $sampleDir/sqlcipher-3.0-testkey.db
   execsql {
     PRAGMA key = 'testkey';
     SELECT count(*) FROM t1;
@@ -1718,7 +1730,7 @@ db close
 # open a 2.0 database with little endian hmac page numbers (default)
 # verify it can be opened
 do_test open-2.0-le-database {
-  sqlite_orig db sqlcipher-2.0-le-testkey.db
+  sqlite_orig db $sampleDir/sqlcipher-2.0-le-testkey.db
   execsql {
     PRAGMA key = 'testkey';
     PRAGMA kdf_iter = 4000;
@@ -1731,7 +1743,7 @@ db close
 # open a 2.0 database with big-endian hmac page numbers
 # verify it can be opened
 do_test open-2.0-be-database {
-  sqlite_orig db sqlcipher-2.0-be-testkey.db
+  sqlite_orig db $sampleDir/sqlcipher-2.0-be-testkey.db
   execsql {
     PRAGMA key = 'testkey';
     PRAGMA cipher_hmac_pgno = be;
@@ -1747,7 +1759,7 @@ db close
 # copy schema between the two, and verify the latter 
 # can be opened
 do_test be-to-le-migration {
-  sqlite_orig db sqlcipher-2.0-be-testkey.db
+  sqlite_orig db $sampleDir/sqlcipher-2.0-be-testkey.db
 
   execsql {
     PRAGMA key = 'testkey';
@@ -1922,18 +1934,6 @@ do_test verify-pragma-cipher-page-size-changed {
 db close
 file delete -force test.db
 
-# verify invalid cipher does not cause segfault
-if_built_with_openssl verify-invalid-cipher-does-not-segfault {
-    sqlite_orig db test.db
-    execsql {
-        PRAGMA key = 'test';
-        PRAGMA cipher = 'junk';
-        PRAGMA cipher;
-    }
-} {AES-256-CBC}
-db close
-file delete -force test.db
-
 # verify setting cipher_store_pass before key
 # does not cause segfault
 do_test verify-cipher-store-pass-before-key-does-not-segfault {
@@ -1967,7 +1967,7 @@ if_built_with_openssl verify-pragma-cipher-changed {
         PRAGMA cipher = 'AES-256-ECB';
         PRAGMA cipher;
     }
-} {AES-256-ECB}
+} {{PRAGMA cipher command is deprecated, please remove from usage.} AES-256-ECB}
 db close
 file delete -force test.db
 
@@ -2027,7 +2027,7 @@ file delete -force test.db
 # hmac salt mask 
 # verify it can be opened
 do_test open-2.0-beta-database {
-  sqlite_orig db sqlcipher-2.0-beta-testkey.db
+  sqlite_orig db $sampleDir/sqlcipher-2.0-beta-testkey.db
   execsql {
     PRAGMA key = 'testkey';
     PRAGMA kdf_iter = 4000;
@@ -2044,7 +2044,7 @@ db close
 # copy schema between the two, and verify the latter 
 # can be opened
 do_test 2.0-beta-to-2.0-migration {
-  sqlite_orig db sqlcipher-2.0-beta-testkey.db
+  sqlite_orig db $sampleDir/sqlcipher-2.0-beta-testkey.db
 
   execsql {
     PRAGMA key = 'testkey';
@@ -2092,7 +2092,7 @@ db close
 file delete -force test.db
 
 do_test migrate-1.1.8-database-to-3x-format {
-  file copy -force sqlcipher-1.1.8-testkey.db test.db
+  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db test.db
   sqlite_orig db test.db
   execsql {
     PRAGMA key = 'testkey';
@@ -2110,7 +2110,7 @@ db close
 file delete -force test.db
 
 do_test migrate-2-0-le-database-to-3x-format {
-  file copy -force sqlcipher-2.0-le-testkey.db test.db
+  file copy -force $sampleDir/sqlcipher-2.0-le-testkey.db test.db
   sqlite_orig db test.db
   execsql {
     PRAGMA key = 'testkey';
@@ -2301,6 +2301,47 @@ do_test attach_database_with_non_default_page_size {
 } {2}
 db close
 file delete -force test.db test2.db
+
+if_built_with_openssl wont-write-database-with-invalid-cipher {
+    sqlite_orig db test.db
+    catchsql {
+        PRAGMA key = 'test';
+        PRAGMA cipher = 'foobar';
+        CREATE TABLE t1(a,b);
+    }
+} {1 {SQL logic error}}
+db close
+file delete -force test.db
+
+if_built_with_openssl wont-write-database-with-invalid-cipher-2 {
+    sqlite_orig db test.db
+    execsql {
+        PRAGMA key = 'test';
+        PRAGMA cipher = 'foobar';
+    }
+} {{PRAGMA cipher command is deprecated, please remove from usage.}}
+db close
+file delete -force test.db
+
+do_test verify-cipher-export-with-trace-configured {
+  sqlite_orig db plain.db
+  execsql {
+    CREATE TABLE t1(a,b);
+    INSERT INTO t1(a,b) VALUES(1,2);
+  }
+  set TRACE_OUT {}
+  db trace trace_proc
+  execsql {
+    ATTACH DATABASE 'encrypted.db' AS encrypted KEY 'encrypted';
+    SELECT sqlcipher_export('encrypted');
+    DETACH DATABASE encrypted;
+  }
+  set TRACE_OUT
+} {{ATTACH DATABASE 'encrypted.db' AS encrypted KEY 'encrypted';} {SELECT sqlcipher_export('encrypted');} {DETACH DATABASE encrypted;}}
+set TRACE_OUT {}
+db close
+file delete -force plain.db
+file delete -force encrypted.db
 
 sqlite3_test_control_pending_byte $old_pending_byte
 finish_test

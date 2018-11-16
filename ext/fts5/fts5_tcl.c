@@ -14,7 +14,14 @@
 
 
 #ifdef SQLITE_TEST
-#include <tcl.h>
+#if defined(INCLUDE_SQLITE_TCL_H)
+#  include "sqlite_tcl.h"
+#else
+#  include "tcl.h"
+#  ifndef SQLITE_TCLAPI
+#    define SQLITE_TCLAPI
+#  endif
+#endif
 
 #ifdef SQLITE_ENABLE_FTS5
 
@@ -78,7 +85,7 @@ static int f5tResultToErrorCode(const char *zRes){
   return SQLITE_ERROR;
 }
 
-static int f5tDbAndApi(
+static int SQLITE_TCLAPI f5tDbAndApi(
   Tcl_Interp *interp, 
   Tcl_Obj *pObj, 
   sqlite3 **ppDb, 
@@ -92,16 +99,13 @@ static int f5tDbAndApi(
     sqlite3_stmt *pStmt = 0;
     fts5_api *pApi = 0;
 
-    rc = sqlite3_prepare_v2(db, "SELECT fts5()", -1, &pStmt, 0);
+    rc = sqlite3_prepare_v2(db, "SELECT fts5(?1)", -1, &pStmt, 0);
     if( rc!=SQLITE_OK ){
       Tcl_AppendResult(interp, "error: ", sqlite3_errmsg(db), 0);
       return TCL_ERROR;
     }
-
-    if( SQLITE_ROW==sqlite3_step(pStmt) ){
-      const void *pPtr = sqlite3_column_blob(pStmt, 0);
-      memcpy((void*)&pApi, pPtr, sizeof(pApi));
-    }
+    sqlite3_bind_pointer(pStmt, 1, (void*)&pApi, "fts5_api_ptr", 0);
+    sqlite3_step(pStmt);
 
     if( sqlite3_finalize(pStmt)!=SQLITE_OK ){
       Tcl_AppendResult(interp, "error: ", sqlite3_errmsg(db), 0);
@@ -164,7 +168,7 @@ static int xTokenizeCb(
   return rc;
 }
 
-static int xF5tApi(void*, Tcl_Interp*, int, Tcl_Obj *CONST []);
+static int SQLITE_TCLAPI xF5tApi(void*, Tcl_Interp*, int, Tcl_Obj *CONST []);
 
 static int xQueryPhraseCb(
   const Fts5ExtensionApi *pApi, 
@@ -209,7 +213,7 @@ static void xSetAuxdataDestructor(void *p){
 **
 ** Description...
 */
-static int xF5tApi(
+static int SQLITE_TCLAPI xF5tApi(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -602,7 +606,7 @@ static void xF5tDestroy(void *pCtx){
 **
 ** Description...
 */
-static int f5tCreateFunction(
+static int SQLITE_TCLAPI f5tCreateFunction(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -672,7 +676,7 @@ static int xTokenizeCb2(
 **
 ** Description...
 */
-static int f5tTokenize(
+static int SQLITE_TCLAPI f5tTokenize(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -878,7 +882,7 @@ static int f5tTokenizerTokenize(
 /*
 ** sqlite3_fts5_token ?-colocated? TEXT START END
 */
-static int f5tTokenizerReturn(
+static int SQLITE_TCLAPI f5tTokenizerReturn(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -949,7 +953,7 @@ static void f5tDelTokenizer(void *pCtx){
 ** SCRIPT2 should invoke the [sqlite3_fts5_token] command once for each
 ** token within the tokenized text.
 */
-static int f5tCreateTokenizer(
+static int SQLITE_TCLAPI f5tCreateTokenizer(
   ClientData clientData,
   Tcl_Interp *interp,
   int objc,
@@ -992,7 +996,7 @@ static int f5tCreateTokenizer(
   return TCL_OK;
 }
 
-static void xF5tFree(ClientData clientData){
+static void SQLITE_TCLAPI xF5tFree(ClientData clientData){
   ckfree(clientData);
 }
 
@@ -1001,7 +1005,7 @@ static void xF5tFree(ClientData clientData){
 **
 ** Set or clear the global "may-be-corrupt" flag. Return the old value.
 */
-static int f5tMayBeCorrupt(
+static int SQLITE_TCLAPI f5tMayBeCorrupt(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -1033,7 +1037,7 @@ static unsigned int f5t_fts5HashKey(int nSlot, const char *p, int n){
   return (h % nSlot);
 }
 
-static int f5tTokenHash(
+static int SQLITE_TCLAPI f5tTokenHash(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -1058,7 +1062,7 @@ static int f5tTokenHash(
   return TCL_OK;
 }
 
-static int f5tRegisterMatchinfo(
+static int SQLITE_TCLAPI f5tRegisterMatchinfo(
   void * clientData,
   Tcl_Interp *interp,
   int objc,
@@ -1083,7 +1087,7 @@ static int f5tRegisterMatchinfo(
   return TCL_OK;
 }
 
-static int f5tRegisterTok(
+static int SQLITE_TCLAPI f5tRegisterTok(
   void * clientData,
   Tcl_Interp *interp,
   int objc,

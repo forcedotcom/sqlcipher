@@ -506,6 +506,7 @@ static void fts5SetUniqueFlag(sqlite3_index_info *pIdxInfo){
 static int fts5BestIndexMethod(sqlite3_vtab *pVTab, sqlite3_index_info *pInfo){
   Fts5Table *pTab = (Fts5Table*)pVTab;
   Fts5Config *pConfig = pTab->pConfig;
+  const int nCol = pConfig->nCol;
   int idxFlags = 0;               /* Parameter passed through to xFilter() */
   int bHasMatch;
   int iNext;
@@ -531,24 +532,34 @@ static int fts5BestIndexMethod(sqlite3_vtab *pVTab, sqlite3_index_info *pInfo){
 
   int aColMap[3];
   aColMap[0] = -1;
-  aColMap[1] = pConfig->nCol;
-  aColMap[2] = pConfig->nCol+1;
+  aColMap[1] = nCol;
+  aColMap[2] = nCol+1;
 
   /* Set idxFlags flags for all WHERE clause terms that will be used. */
   for(i=0; i<pInfo->nConstraint; i++){
     struct sqlite3_index_constraint *p = &pInfo->aConstraint[i];
-    int j;
-    for(j=0; j<ArraySize(aConstraint); j++){
-      struct Constraint *pC = &aConstraint[j];
-      if( p->iColumn==aColMap[pC->iCol] && p->op & pC->op ){
-        if( p->usable ){
+    int iCol = p->iColumn;
+
+    if( (p->op==SQLITE_INDEX_CONSTRAINT_MATCH && iCol>=0 && iCol<=nCol)
+     || (p->op==SQLITE_INDEX_CONSTRAINT_EQ && iCol==nCol)
+    ){
+      /* A MATCH operator or equivalent */
+      if( p->usable ){
+        idxFlags = (idxFlags & 0xFFFF) | FTS5_BI_MATCH | (iCol << 16);
+        aConstraint[0].iConsIndex = i;
+      }else{
+        /* As there exists an unusable MATCH constraint this is an 
+        ** unusable plan. Set a prohibitively high cost. */
+        pInfo->estimatedCost = 1e50;
+        return SQLITE_OK;
+      }
+    }else{
+      int j;
+      for(j=1; j<ArraySize(aConstraint); j++){
+        struct Constraint *pC = &aConstraint[j];
+        if( iCol==aColMap[pC->iCol] && p->op & pC->op && p->usable ){
           pC->iConsIndex = i;
           idxFlags |= pC->fts5op;
-        }else if( j==0 ){
-          /* As there exists an unusable MATCH constraint this is an 
-          ** unusable plan. Set a prohibitively high cost. */
-          pInfo->estimatedCost = 1e50;
-          return SQLITE_OK;
         }
       }
     }
@@ -597,27 +608,38 @@ static int fts5BestIndexMethod(sqlite3_vtab *pVTab, sqlite3_index_info *pInfo){
   return SQLITE_OK;
 }
 
+static int fts5NewTransaction(Fts5Table *pTab){
+  Fts5Cursor *pCsr;
+  for(pCsr=pTab->pGlobal->pCsr; pCsr; pCsr=pCsr->pNext){
+    if( pCsr->base.pVtab==(sqlite3_vtab*)pTab ) return SQLITE_OK;
+  }
+  return sqlite3Fts5StorageReset(pTab->pStorage);
+}
+
 /*
 ** Implementation of xOpen method.
 */
 static int fts5OpenMethod(sqlite3_vtab *pVTab, sqlite3_vtab_cursor **ppCsr){
   Fts5Table *pTab = (Fts5Table*)pVTab;
   Fts5Config *pConfig = pTab->pConfig;
-  Fts5Cursor *pCsr;               /* New cursor object */
+  Fts5Cursor *pCsr = 0;           /* New cursor object */
   int nByte;                      /* Bytes of space to allocate */
-  int rc = SQLITE_OK;             /* Return code */
+  int rc;                         /* Return code */
 
-  nByte = sizeof(Fts5Cursor) + pConfig->nCol * sizeof(int);
-  pCsr = (Fts5Cursor*)sqlite3_malloc(nByte);
-  if( pCsr ){
-    Fts5Global *pGlobal = pTab->pGlobal;
-    memset(pCsr, 0, nByte);
-    pCsr->aColumnSize = (int*)&pCsr[1];
-    pCsr->pNext = pGlobal->pCsr;
-    pGlobal->pCsr = pCsr;
-    pCsr->iCsrId = ++pGlobal->iNextId;
-  }else{
-    rc = SQLITE_NOMEM;
+  rc = fts5NewTransaction(pTab);
+  if( rc==SQLITE_OK ){
+    nByte = sizeof(Fts5Cursor) + pConfig->nCol * sizeof(int);
+    pCsr = (Fts5Cursor*)sqlite3_malloc(nByte);
+    if( pCsr ){
+      Fts5Global *pGlobal = pTab->pGlobal;
+      memset(pCsr, 0, nByte);
+      pCsr->aColumnSize = (int*)&pCsr[1];
+      pCsr->pNext = pGlobal->pCsr;
+      pGlobal->pCsr = pCsr;
+      pCsr->iCsrId = ++pGlobal->iNextId;
+    }else{
+      rc = SQLITE_NOMEM;
+    }
   }
   *ppCsr = (sqlite3_vtab_cursor*)pCsr;
   return rc;
@@ -861,7 +883,8 @@ static int fts5PrepareStatement(
   if( zSql==0 ){
     rc = SQLITE_NOMEM; 
   }else{
-    rc = sqlite3_prepare_v2(pConfig->db, zSql, -1, &pRet, 0);
+    rc = sqlite3_prepare_v3(pConfig->db, zSql, -1, 
+                            SQLITE_PREPARE_PERSISTENT, &pRet, 0);
     if( rc!=SQLITE_OK ){
       *pConfig->pzErrmsg = sqlite3_mprintf("%s", sqlite3_errmsg(pConfig->db));
     }
@@ -997,7 +1020,8 @@ static int fts5FindRankFunction(Fts5Cursor *pCsr){
     char *zSql = sqlite3Fts5Mprintf(&rc, "SELECT %s", zRankArgs);
     if( zSql ){
       sqlite3_stmt *pStmt = 0;
-      rc = sqlite3_prepare_v2(pConfig->db, zSql, -1, &pStmt, 0);
+      rc = sqlite3_prepare_v3(pConfig->db, zSql, -1,
+                              SQLITE_PREPARE_PERSISTENT, &pStmt, 0);
       sqlite3_free(zSql);
       assert( rc==SQLITE_OK || pCsr->pRankArgStmt==0 );
       if( rc==SQLITE_OK ){
@@ -1112,6 +1136,7 @@ static int fts5FilterMethod(
   sqlite3_value *pRowidEq = 0;    /* rowid = ? expression (or NULL) */
   sqlite3_value *pRowidLe = 0;    /* rowid <= ? expression (or NULL) */
   sqlite3_value *pRowidGe = 0;    /* rowid >= ? expression (or NULL) */
+  int iCol;                       /* Column on LHS of MATCH operator */
   char **pzErrmsg = pConfig->pzErrmsg;
 
   UNUSED_PARAM(zUnused);
@@ -1142,6 +1167,8 @@ static int fts5FilterMethod(
   if( BitFlagTest(idxNum, FTS5_BI_ROWID_EQ) ) pRowidEq = apVal[iVal++];
   if( BitFlagTest(idxNum, FTS5_BI_ROWID_LE) ) pRowidLe = apVal[iVal++];
   if( BitFlagTest(idxNum, FTS5_BI_ROWID_GE) ) pRowidGe = apVal[iVal++];
+  iCol = (idxNum>>16);
+  assert( iCol>=0 && iCol<=pConfig->nCol );
   assert( iVal==nVal );
   bOrderByRank = ((idxNum & FTS5_BI_ORDER_RANK) ? 1 : 0);
   pCsr->bDesc = bDesc = ((idxNum & FTS5_BI_ORDER_DESC) ? 1 : 0);
@@ -1175,7 +1202,6 @@ static int fts5FilterMethod(
     pCsr->ePlan = FTS5_PLAN_SOURCE;
     pCsr->pExpr = pTab->pSortCsr->pExpr;
     rc = fts5CursorFirst(pTab, pCsr, bDesc);
-    sqlite3Fts5ExprClearEof(pCsr->pExpr);
   }else if( pMatch ){
     const char *zExpr = (const char*)sqlite3_value_text(apVal[0]);
     if( zExpr==0 ) zExpr = "";
@@ -1189,7 +1215,7 @@ static int fts5FilterMethod(
         rc = fts5SpecialMatch(pTab, pCsr, &zExpr[1]);
       }else{
         char **pzErr = &pTab->base.zErrMsg;
-        rc = sqlite3Fts5ExprNew(pConfig, zExpr, &pCsr->pExpr, pzErr);
+        rc = sqlite3Fts5ExprNew(pConfig, iCol, zExpr, &pCsr->pExpr, pzErr);
         if( rc==SQLITE_OK ){
           if( bOrderByRank ){
             pCsr->ePlan = FTS5_PLAN_SORTED_MATCH;
@@ -1511,13 +1537,13 @@ static int fts5UpdateMethod(
       rc = SQLITE_ERROR;
     }
 
-    /* Case 1: DELETE */
+    /* DELETE */
     else if( nArg==1 ){
       i64 iDel = sqlite3_value_int64(apVal[0]);  /* Rowid to delete */
       rc = sqlite3Fts5StorageDelete(pTab->pStorage, iDel, 0);
     }
 
-    /* Case 2: INSERT */
+    /* INSERT */
     else if( eType0!=SQLITE_INTEGER ){     
       /* If this is a REPLACE, first remove the current entry (if any) */
       if( eConflict==SQLITE_REPLACE 
@@ -1529,7 +1555,7 @@ static int fts5UpdateMethod(
       fts5StorageInsert(&rc, pTab, apVal, pRowid);
     }
 
-    /* Case 2: UPDATE */
+    /* UPDATE */
     else{
       i64 iOld = sqlite3_value_int64(apVal[0]);  /* Old rowid */
       i64 iNew = sqlite3_value_int64(apVal[1]);  /* New rowid */
@@ -1569,7 +1595,7 @@ static int fts5SyncMethod(sqlite3_vtab *pVtab){
   fts5CheckTransactionState(pTab, FTS5_SYNC, 0);
   pTab->pConfig->pzErrmsg = &pTab->base.zErrMsg;
   fts5TripCursors(pTab);
-  rc = sqlite3Fts5StorageSync(pTab->pStorage, 1);
+  rc = sqlite3Fts5StorageSync(pTab->pStorage);
   pTab->pConfig->pzErrmsg = 0;
   return rc;
 }
@@ -1578,8 +1604,8 @@ static int fts5SyncMethod(sqlite3_vtab *pVtab){
 ** Implementation of xBegin() method. 
 */
 static int fts5BeginMethod(sqlite3_vtab *pVtab){
-  UNUSED_PARAM(pVtab);  /* Call below is a no-op for NDEBUG builds */
   fts5CheckTransactionState((Fts5Table*)pVtab, FTS5_BEGIN, 0);
+  fts5NewTransaction((Fts5Table*)pVtab);
   return SQLITE_OK;
 }
 
@@ -2380,7 +2406,7 @@ static int fts5SavepointMethod(sqlite3_vtab *pVtab, int iSavepoint){
   UNUSED_PARAM(iSavepoint);  /* Call below is a no-op for NDEBUG builds */
   fts5CheckTransactionState(pTab, FTS5_SAVEPOINT, iSavepoint);
   fts5TripCursors(pTab);
-  return sqlite3Fts5StorageSync(pTab->pStorage, 0);
+  return sqlite3Fts5StorageSync(pTab->pStorage);
 }
 
 /*
@@ -2393,7 +2419,7 @@ static int fts5ReleaseMethod(sqlite3_vtab *pVtab, int iSavepoint){
   UNUSED_PARAM(iSavepoint);  /* Call below is a no-op for NDEBUG builds */
   fts5CheckTransactionState(pTab, FTS5_RELEASE, iSavepoint);
   fts5TripCursors(pTab);
-  return sqlite3Fts5StorageSync(pTab->pStorage, 0);
+  return sqlite3Fts5StorageSync(pTab->pStorage);
 }
 
 /*
@@ -2583,15 +2609,14 @@ static void fts5ModuleDestroy(void *pCtx){
 static void fts5Fts5Func(
   sqlite3_context *pCtx,          /* Function call context */
   int nArg,                       /* Number of args */
-  sqlite3_value **apUnused        /* Function arguments */
+  sqlite3_value **apArg           /* Function arguments */
 ){
   Fts5Global *pGlobal = (Fts5Global*)sqlite3_user_data(pCtx);
-  char buf[8];
-  UNUSED_PARAM2(nArg, apUnused);
-  assert( nArg==0 );
-  assert( sizeof(buf)>=sizeof(pGlobal) );
-  memcpy(buf, (void*)&pGlobal, sizeof(pGlobal));
-  sqlite3_result_blob(pCtx, buf, sizeof(pGlobal), SQLITE_TRANSIENT);
+  fts5_api **ppApi;
+  UNUSED_PARAM(nArg);
+  assert( nArg==1 );
+  ppApi = (fts5_api**)sqlite3_value_pointer(apArg[0], "fts5_api_ptr");
+  if( ppApi ) *ppApi = &pGlobal->api;
 }
 
 /*
@@ -2656,7 +2681,7 @@ static int fts5Init(sqlite3 *db){
     if( rc==SQLITE_OK ) rc = sqlite3Fts5VocabInit(pGlobal, db);
     if( rc==SQLITE_OK ){
       rc = sqlite3_create_function(
-          db, "fts5", 0, SQLITE_UTF8, p, fts5Fts5Func, 0, 0
+          db, "fts5", 1, SQLITE_UTF8, p, fts5Fts5Func, 0, 0
       );
     }
     if( rc==SQLITE_OK ){
@@ -2665,6 +2690,17 @@ static int fts5Init(sqlite3 *db){
       );
     }
   }
+
+  /* If SQLITE_FTS5_ENABLE_TEST_MI is defined, assume that the file
+  ** fts5_test_mi.c is compiled and linked into the executable. And call
+  ** its entry point to enable the matchinfo() demo.  */
+#ifdef SQLITE_FTS5_ENABLE_TEST_MI
+  if( rc==SQLITE_OK ){
+    extern int sqlite3Fts5TestRegisterMatchinfo(sqlite3*);
+    rc = sqlite3Fts5TestRegisterMatchinfo(db);
+  }
+#endif
+
   return rc;
 }
 

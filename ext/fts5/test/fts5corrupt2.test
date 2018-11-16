@@ -37,7 +37,7 @@ do_execsql_test 1.0 {
 }
 set mask [expr 31 << 31]
 
-if 1 {
+if 0 {
 
 # Test 1:
 #
@@ -82,6 +82,8 @@ foreach {tno stmt} {
       INSERT INTO t1(t1) VALUES('integrity-check');
     } {}
   }
+}
+
 }
 
 # Using the same database as the 1.* tests.
@@ -212,8 +214,6 @@ foreach {tn nCut} {
   # do_test 4.$tn.x { expr $nCorrupt>0 } 1
 }
 
-}
-
 set doc [string repeat "A B C " 1000]
 do_execsql_test 5.0 {
   CREATE VIRTUAL TABLE x5 USING fts5(tt);
@@ -269,4 +269,3 @@ do_catchsql_test 6.2 {
 
 sqlite3_fts5_may_be_corrupt 0
 finish_test
-

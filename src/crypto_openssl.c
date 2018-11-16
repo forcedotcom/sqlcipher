@@ -37,6 +37,7 @@
 #include <openssl/rand.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
+#include <openssl/err.h>
 
 typedef struct {
   EVP_CIPHER *evp_cipher;
@@ -46,13 +47,40 @@ static unsigned int openssl_external_init = 0;
 static unsigned int openssl_init_count = 0;
 static sqlite3_mutex* openssl_rand_mutex = NULL;
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+static HMAC_CTX *HMAC_CTX_new(void)
+{
+  HMAC_CTX *ctx = OPENSSL_malloc(sizeof(*ctx));
+  if (ctx != NULL) {
+    HMAC_CTX_init(ctx);
+  }
+  return ctx;
+}
+
+// Per 1.1.0 (https://wiki.openssl.org/index.php/1.1_API_Changes)
+// HMAC_CTX_free should call HMAC_CTX_cleanup, then EVP_MD_CTX_Cleanup.
+// HMAC_CTX_cleanup internally calls EVP_MD_CTX_cleanup so these
+// calls are not needed.
+static void HMAC_CTX_free(HMAC_CTX *ctx)
+{
+  if (ctx != NULL) {
+    HMAC_CTX_cleanup(ctx);
+    OPENSSL_free(ctx);
+  }
+}
+#endif
+
 static int sqlcipher_openssl_add_random(void *ctx, void *buffer, int length) {
 #ifndef SQLCIPHER_OPENSSL_NO_MUTEX_RAND
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_add_random: entering openssl_rand_mutex %p\n", openssl_rand_mutex);
   sqlite3_mutex_enter(openssl_rand_mutex);
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_add_random: entered openssl_rand_mutex %p\n", openssl_rand_mutex);
 #endif
   RAND_add(buffer, length, 0);
 #ifndef SQLCIPHER_OPENSSL_NO_MUTEX_RAND
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_add_random: leaving openssl_rand_mutex %p\n", openssl_rand_mutex);
   sqlite3_mutex_leave(openssl_rand_mutex);
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_add_random: left openssl_rand_mutex %p\n", openssl_rand_mutex);
 #endif
   return SQLITE_OK;
 }
@@ -67,7 +95,9 @@ static int sqlcipher_openssl_activate(void *ctx) {
   /* initialize openssl and increment the internal init counter
      but only if it hasn't been initalized outside of SQLCipher by this program 
      e.g. on startup */
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_activate: entering static master mutex");
   sqlite3_mutex_enter(sqlite3_mutex_alloc(SQLITE_MUTEX_STATIC_MASTER));
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_activate: entered static master mutex");
 
   if(openssl_init_count == 0 && EVP_get_cipherbyname(CIPHER) != NULL) {
     /* if openssl has not yet been initialized by this library, but 
@@ -87,18 +117,24 @@ static int sqlcipher_openssl_activate(void *ctx) {
 
   if(openssl_init_count == 0 && openssl_external_init == 0)  {
     /* if the library was not externally initialized, then should be now */
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
     OpenSSL_add_all_algorithms();
+#endif
   } 
 
 #ifndef SQLCIPHER_OPENSSL_NO_MUTEX_RAND
   if(openssl_rand_mutex == NULL) {
     /* allocate a mutex to guard against concurrent calls to RAND_bytes() */
+    CODEC_TRACE_MUTEX("sqlcipher_openssl_activate: allocating openssl_rand_mutex");
     openssl_rand_mutex = sqlite3_mutex_alloc(SQLITE_MUTEX_FAST);
+    CODEC_TRACE_MUTEX("sqlcipher_openssl_activate: allocated openssl_rand_mutex %p", openssl_rand_mutex);
   }
 #endif
 
   openssl_init_count++; 
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_activate: leaving static master mutex");
   sqlite3_mutex_leave(sqlite3_mutex_alloc(SQLITE_MUTEX_STATIC_MASTER));
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_activate: left static master mutex");
   return SQLITE_OK;
 }
 
@@ -106,7 +142,9 @@ static int sqlcipher_openssl_activate(void *ctx) {
    freeing the EVP structures on the final deactivation to ensure that 
    OpenSSL memory is cleaned up */
 static int sqlcipher_openssl_deactivate(void *ctx) {
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_deactivate: entering static master mutex");
   sqlite3_mutex_enter(sqlite3_mutex_alloc(SQLITE_MUTEX_STATIC_MASTER));
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_deactivate: entered static master mutex");
   openssl_init_count--;
 
   if(openssl_init_count == 0) {
@@ -116,14 +154,22 @@ static int sqlcipher_openssl_deactivate(void *ctx) {
        Note: this code will only be reached if OpensSSL_add_all_algorithms()
        is called by SQLCipher internally. This should prevent SQLCipher from 
        "cleaning up" openssl when it was initialized externally by the program */
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
       EVP_cleanup();
+#endif
+    } else {
+      openssl_external_init = 0;
     }
 #ifndef SQLCIPHER_OPENSSL_NO_MUTEX_RAND
+    CODEC_TRACE_MUTEX("sqlcipher_openssl_deactivate: freeing openssl_rand_mutex %p", openssl_rand_mutex);
     sqlite3_mutex_free(openssl_rand_mutex);
+    CODEC_TRACE_MUTEX("sqlcipher_openssl_deactivate: freed openssl_rand_mutex %p", openssl_rand_mutex);
     openssl_rand_mutex = NULL;
 #endif
   }
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_deactivate: leaving static master mutex");
   sqlite3_mutex_leave(sqlite3_mutex_alloc(SQLITE_MUTEX_STATIC_MASTER));
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_deactivate: left static master mutex");
   return SQLITE_OK;
 }
 
@@ -145,24 +191,28 @@ static int sqlcipher_openssl_random (void *ctx, void *buffer, int length) {
      but a more proper solution is that applications setup platform-appropriate
      thread saftey in openssl externally */
 #ifndef SQLCIPHER_OPENSSL_NO_MUTEX_RAND
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_random: entering openssl_rand_mutex %p", openssl_rand_mutex);
   sqlite3_mutex_enter(openssl_rand_mutex);
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_random: entered openssl_rand_mutex %p", openssl_rand_mutex);
 #endif
   rc = RAND_bytes((unsigned char *)buffer, length);
 #ifndef SQLCIPHER_OPENSSL_NO_MUTEX_RAND
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_random: leaving openssl_rand_mutex %p", openssl_rand_mutex);
   sqlite3_mutex_leave(openssl_rand_mutex);
+  CODEC_TRACE_MUTEX("sqlcipher_openssl_random: left openssl_rand_mutex %p", openssl_rand_mutex);
 #endif
   return (rc == 1) ? SQLITE_OK : SQLITE_ERROR;
 }
 
 static int sqlcipher_openssl_hmac(void *ctx, unsigned char *hmac_key, int key_sz, unsigned char *in, int in_sz, unsigned char *in2, int in2_sz, unsigned char *out) {
-  HMAC_CTX hctx;
   unsigned int outlen;
-  HMAC_CTX_init(&hctx);
-  HMAC_Init_ex(&hctx, hmac_key, key_sz, EVP_sha1(), NULL);
-  HMAC_Update(&hctx, in, in_sz);
-  HMAC_Update(&hctx, in2, in2_sz);
-  HMAC_Final(&hctx, out, &outlen);
-  HMAC_CTX_cleanup(&hctx);
+  HMAC_CTX* hctx = HMAC_CTX_new();
+  if(hctx == NULL || in == NULL) return SQLITE_ERROR;
+  HMAC_Init_ex(hctx, hmac_key, key_sz, EVP_sha1(), NULL);
+  HMAC_Update(hctx, in, in_sz);
+  if(in2 != NULL) HMAC_Update(hctx, in2, in2_sz);
+  HMAC_Final(hctx, out, &outlen);
+  HMAC_CTX_free(hctx);
   return SQLITE_OK; 
 }
 
@@ -172,18 +222,18 @@ static int sqlcipher_openssl_kdf(void *ctx, const unsigned char *pass, int pass_
 }
 
 static int sqlcipher_openssl_cipher(void *ctx, int mode, unsigned char *key, int key_sz, unsigned char *iv, unsigned char *in, int in_sz, unsigned char *out) {
-  EVP_CIPHER_CTX ectx;
   int tmp_csz, csz;
- 
-  EVP_CipherInit(&ectx, ((openssl_ctx *)ctx)->evp_cipher, NULL, NULL, mode);
-  EVP_CIPHER_CTX_set_padding(&ectx, 0); // no padding
-  EVP_CipherInit(&ectx, NULL, key, iv, mode);
-  EVP_CipherUpdate(&ectx, out, &tmp_csz, in, in_sz);
+  EVP_CIPHER_CTX* ectx = EVP_CIPHER_CTX_new();
+  if(ectx == NULL) return SQLITE_ERROR;
+  EVP_CipherInit_ex(ectx, ((openssl_ctx *)ctx)->evp_cipher, NULL, NULL, NULL, mode);
+  EVP_CIPHER_CTX_set_padding(ectx, 0); // no padding
+  EVP_CipherInit_ex(ectx, NULL, NULL, key, iv, mode);
+  EVP_CipherUpdate(ectx, out, &tmp_csz, in, in_sz);
   csz = tmp_csz;  
   out += tmp_csz;
-  EVP_CipherFinal(&ectx, out, &tmp_csz);
+  EVP_CipherFinal_ex(ectx, out, &tmp_csz);
   csz += tmp_csz;
-  EVP_CIPHER_CTX_cleanup(&ectx);
+  EVP_CIPHER_CTX_free(ectx);
   assert(in_sz == csz);
   return SQLITE_OK; 
 }
