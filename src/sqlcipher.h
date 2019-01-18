@@ -35,6 +35,21 @@
 #ifndef SQLCIPHER_H
 #define SQLCIPHER_H
 
+#define SQLCIPHER_HMAC_SHA1 0
+#define SQLCIPHER_HMAC_SHA1_LABEL "HMAC_SHA1"
+#define SQLCIPHER_HMAC_SHA256 1
+#define SQLCIPHER_HMAC_SHA256_LABEL "HMAC_SHA256"
+#define SQLCIPHER_HMAC_SHA512 2
+#define SQLCIPHER_HMAC_SHA512_LABEL "HMAC_SHA512"
+
+
+#define SQLCIPHER_PBKDF2_HMAC_SHA1 0
+#define SQLCIPHER_PBKDF2_HMAC_SHA1_LABEL "PBKDF2_HMAC_SHA1"
+#define SQLCIPHER_PBKDF2_HMAC_SHA256 1
+#define SQLCIPHER_PBKDF2_HMAC_SHA256_LABEL "PBKDF2_HMAC_SHA256"
+#define SQLCIPHER_PBKDF2_HMAC_SHA512 2
+#define SQLCIPHER_PBKDF2_HMAC_SHA512_LABEL "PBKDF2_HMAC_SHA512"
+
 
 typedef struct {
   int (*activate)(void *ctx);
@@ -42,15 +57,14 @@ typedef struct {
   const char* (*get_provider_name)(void *ctx);
   int (*add_random)(void *ctx, void *buffer, int length);
   int (*random)(void *ctx, void *buffer, int length);
-  int (*hmac)(void *ctx, unsigned char *hmac_key, int key_sz, unsigned char *in, int in_sz, unsigned char *in2, int in2_sz, unsigned char *out);
-  int (*kdf)(void *ctx, const unsigned char *pass, int pass_sz, unsigned char* salt, int salt_sz, int workfactor, int key_sz, unsigned char *key);
+  int (*hmac)(void *ctx, int algorithm, unsigned char *hmac_key, int key_sz, unsigned char *in, int in_sz, unsigned char *in2, int in2_sz, unsigned char *out);
+  int (*kdf)(void *ctx, int algorithm, const unsigned char *pass, int pass_sz, unsigned char* salt, int salt_sz, int workfactor, int key_sz, unsigned char *key);
   int (*cipher)(void *ctx, int mode, unsigned char *key, int key_sz, unsigned char *iv, unsigned char *in, int in_sz, unsigned char *out);
-  int (*set_cipher)(void *ctx, const char *cipher_name);
   const char* (*get_cipher)(void *ctx);
   int (*get_key_sz)(void *ctx);
   int (*get_iv_sz)(void *ctx);
   int (*get_block_sz)(void *ctx);
-  int (*get_hmac_sz)(void *ctx);
+  int (*get_hmac_sz)(void *ctx, int algorithm);
   int (*ctx_copy)(void *target_ctx, void *source_ctx);
   int (*ctx_cmp)(void *c1, void *c2);
   int (*ctx_init)(void **ctx);
@@ -60,16 +74,18 @@ typedef struct {
 } sqlcipher_provider;
 
 /* utility functions */
-void sqlcipher_free(void *ptr, int sz);
-void* sqlcipher_malloc(int sz);
-void* sqlcipher_memset(void *v, unsigned char value, int len);
-int sqlcipher_ismemset(const void *v, unsigned char value, int len);
-int sqlcipher_memcmp(const void *v0, const void *v1, int len);
+void sqlcipher_free(void *, int);
+void* sqlcipher_malloc(int);
+void sqlcipher_mlock(void *, int);
+void sqlcipher_munlock(void *, int);
+void* sqlcipher_memset(void *, unsigned char, int);
+int sqlcipher_ismemset(const void *, unsigned char, int);
+int sqlcipher_memcmp(const void *, const void *, int);
 void sqlcipher_free(void *, int);
 
 /* provider interfaces */
-int sqlcipher_register_provider(sqlcipher_provider *p);
-sqlcipher_provider* sqlcipher_get_provider();
+int sqlcipher_register_provider(sqlcipher_provider *);
+sqlcipher_provider* sqlcipher_get_provider(void);
 
 #endif
 #endif
