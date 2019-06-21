@@ -548,7 +548,7 @@ int sqlite3changeset_next(sqlite3_changeset_iter *pIter);
 ** sqlite3changeset_next() is called on the iterator or until the 
 ** conflict-handler function returns. If pnCol is not NULL, then *pnCol is 
 ** set to the number of columns in the table affected by the change. If
-** pbIncorrect is not NULL, then *pbIndirect is set to true (1) if the change
+** pbIndirect is not NULL, then *pbIndirect is set to true (1) if the change
 ** is an indirect change, or false (0) otherwise. See the documentation for
 ** [sqlite3session_indirect()] for a description of direct and indirect
 ** changes. Finally, if pOp is not NULL, then *pOp is set to one of 
@@ -1415,7 +1415,7 @@ int sqlite3rebaser_configure(
 ** in size. This function allocates and populates a buffer with a copy
 ** of the changeset rebased rebased according to the configuration of the
 ** rebaser object passed as the first argument. If successful, (*ppOut)
-** is set to point to the new buffer containing the rebased changset and 
+** is set to point to the new buffer containing the rebased changeset and 
 ** (*pnOut) to its size in bytes and SQLITE_OK returned. It is the
 ** responsibility of the caller to eventually free the new buffer using
 ** sqlite3_free(). Otherwise, if an error occurs, (*ppOut) and (*pnOut)

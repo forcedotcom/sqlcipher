@@ -576,6 +576,10 @@ if {[info exists cmdlinearg]==0} {
   if {$cmdlinearg(verbose)==""} {
     set cmdlinearg(verbose) 1
   }
+
+  if {[info commands vdbe_coverage]!=""} {
+    vdbe_coverage start
+  }
 }
 
 # Update the soft-heap-limit each time this script is run. In that
@@ -941,6 +945,12 @@ proc do_execsql_test {args} {
     set result ""
   } elseif {[llength $args]==3} {
     foreach {testname sql result} $args {}
+
+    # With some versions of Tcl on windows, if $result is all whitespace but
+    # contains some CR/LF characters, the [list {*}$result] below returns a
+    # copy of $result instead of a zero length string. Not clear exactly why
+    # this is. The following is a workaround.
+    if {[llength $result]==0} { set result "" }
   } else {
     error [string trim {
       wrong # args: should be "do_execsql_test ?-db DB? testname sql ?result?"
@@ -1290,6 +1300,9 @@ proc finalize_testing {} {
       memdebug_log_sql leaks.tcl
     }
   }
+  if {[info commands vdbe_coverage]!=""} {
+    vdbe_coverage_report
+  }
   foreach f [glob -nocomplain test.db-*-journal] {
     forcedelete $f
   }
@@ -1297,6 +1310,39 @@ proc finalize_testing {} {
     forcedelete $f
   }
   exit [expr {$nErr>0}]
+}
+
+proc vdbe_coverage_report {} {
+  puts "Writing vdbe coverage report to vdbe_coverage.txt"
+  set lSrc [list]
+  set iLine 0
+  if {[file exists ../sqlite3.c]} {
+    set fd [open ../sqlite3.c]
+    set iLine
+    while { ![eof $fd] } {
+      set line [gets $fd]
+      incr iLine
+      if {[regexp {^/\** Begin file (.*\.c) \**/} $line -> file]} {
+        lappend lSrc [list $iLine $file]
+      }
+    }
+    close $fd
+  }
+  set fd [open vdbe_coverage.txt w]
+  foreach miss [vdbe_coverage report] {
+    foreach {line branch never} $miss {}
+    set nextfile ""
+    while {[llength $lSrc]>0 && [lindex $lSrc 0 0] < $line} {
+      set nextfile [lindex $lSrc 0 1]
+      set lSrc [lrange $lSrc 1 end]
+    }
+    if {$nextfile != ""} {
+      puts $fd ""
+      puts $fd "### $nextfile ###"
+    }
+    puts $fd "Vdbe branch $line: never $never (path $branch)"
+  }
+  close $fd
 }
 
 # Display memory statistics for analysis and debugging purposes.
@@ -2048,9 +2094,11 @@ proc memdebug_log_sql {filename} {
   set tbl2 "CREATE TABLE ${database}.frame(frame INTEGER PRIMARY KEY, line);\n"
   set tbl3 "CREATE TABLE ${database}.file(name PRIMARY KEY, content);\n"
 
+  set pid [pid]
+
   foreach f [array names frames] {
     set addr [format %x $f]
-    set cmd "addr2line -e [info nameofexec] $addr"
+    set cmd "eu-addr2line --pid=$pid $addr"
     set line [eval exec $cmd]
     append sql "INSERT INTO ${database}.frame VALUES($f, '$line');\n"
 
