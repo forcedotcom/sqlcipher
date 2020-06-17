@@ -575,17 +575,17 @@
 					"-DSQLITE_TEMP_STORE=2",
 					"-DSQLITE_THREADSAFE",
 					"-DSQLCIPHER_CRYPTO_CC",
-                    "-DSQLITE_SOUNDEX",
-                    "-DSQLITE_ENABLE_RTREE",
-                    "-DSQLITE_ENABLE_STAT3",
-                    "-DSQLITE_ENABLE_STAT4",
-                    "-DSQLITE_ENABLE_COLUMN_METADATA",
-                    "-DSQLITE_ENABLE_MEMORY_MANAGEMENT",
-                    "-DSQLITE_ENABLE_LOAD_EXTENSION",
-                    "-DSQLITE_ENABLE_FTS4_UNICODE61",
-                    "-DSQLITE_ENABLE_UNLOCK_NOTIFY",
-                    "-DSQLITE_ENABLE_JSON1",
-                    "-DSQLITE_ENABLE_FTS5",
+					"-DSQLITE_SOUNDEX",
+					"-DSQLITE_ENABLE_RTREE",
+					"-DSQLITE_ENABLE_STAT3",
+					"-DSQLITE_ENABLE_STAT4",
+					"-DSQLITE_ENABLE_COLUMN_METADATA",
+					"-DSQLITE_ENABLE_MEMORY_MANAGEMENT",
+					"-DSQLITE_ENABLE_LOAD_EXTENSION",
+					"-DSQLITE_ENABLE_FTS4_UNICODE61",
+					"-DSQLITE_ENABLE_UNLOCK_NOTIFY",
+					"-DSQLITE_ENABLE_JSON1",
+					"-DSQLITE_ENABLE_FTS5",
 				);
 				"OTHER_CFLAGS[arch=armv6]" = (
 					"-mno-thumb",
@@ -634,13 +634,13 @@
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 4.3;
+				IPHONEOS_DEPLOYMENT_TARGET = 12.2;
 				"IPHONEOS_DEPLOYMENT_TARGET[arch=arm64]" = 7.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphonesimulator macosx iphoneos";
-				VALID_ARCHS = "arm64 armv7 armv7s x86_64 i386";
+				VALID_ARCHS = "arm64 x86_64 arm64e";
 			};
 			name = Debug;
 		};
@@ -662,12 +662,12 @@
 				GCC_C_LANGUAGE_STANDARD = c99;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 4.3;
+				IPHONEOS_DEPLOYMENT_TARGET = 12.2;
 				"IPHONEOS_DEPLOYMENT_TARGET[arch=arm64]" = 7.0;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphonesimulator macosx iphoneos";
-				VALID_ARCHS = "arm64 armv7 armv7s x86_64 i386";
+				VALID_ARCHS = "arm64 x86_64 arm64e";
 			};
 			name = Release;
 		};
