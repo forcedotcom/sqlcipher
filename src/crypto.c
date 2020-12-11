@@ -1,4 +1,4 @@
-/* 
+/*
 ** SQLCipher
 ** http://sqlcipher.net
 ** 
@@ -37,6 +37,11 @@
 
 #ifdef SQLCIPHER_EXT
 #include "sqlcipher_ext.h"
+#endif
+
+#ifdef SQLCIPHER_TEST
+static int cipher_fail_next_encrypt = 0;
+static int cipher_fail_next_decrypt = 0;
 #endif
 
 /* Generate code to return a string value */
@@ -111,6 +116,24 @@ int sqlcipher_codec_pragma(sqlite3* db, int iDb, Parse *pParse, const char *zLef
       }
   } else
 #endif
+#ifdef SQLCIPHER_TEST
+  if( sqlite3StrICmp(zLeft,"cipher_fail_next_encrypt")==0 ){
+    if( zRight ) {
+      cipher_fail_next_encrypt = sqlite3GetBoolean(zRight,1);
+    } else {
+      char *fail = sqlite3_mprintf("%d", cipher_fail_next_encrypt);
+      codec_vdbe_return_string(pParse, "cipher_fail_next_encrypt", fail, P4_DYNAMIC);
+    }
+  }else
+  if( sqlite3StrICmp(zLeft,"cipher_fail_next_decrypt")==0 ){
+    if( zRight ) {
+      cipher_fail_next_decrypt = sqlite3GetBoolean(zRight,1);
+    } else {
+      char *fail = sqlite3_mprintf("%d", cipher_fail_next_decrypt);
+      codec_vdbe_return_string(pParse, "cipher_fail_next_decrypt", fail, P4_DYNAMIC);
+    }
+  }else
+#endif
   if( sqlite3StrICmp(zLeft, "cipher_fips_status")== 0 && !zRight ){
     if(ctx) {
       char *fips_mode_status = sqlite3_mprintf("%d", sqlcipher_codec_fips_status(ctx));
@@ -119,7 +142,10 @@ int sqlcipher_codec_pragma(sqlite3* db, int iDb, Parse *pParse, const char *zLef
   } else
   if( sqlite3StrICmp(zLeft, "cipher_store_pass")==0 && zRight ) {
     if(ctx) {
+      char *deprecation = "PRAGMA cipher_store_pass is deprecated, please remove from use";
       sqlcipher_codec_set_store_pass(ctx, sqlite3GetBoolean(zRight, 1));
+      codec_vdbe_return_string(pParse, "cipher_store_pass", deprecation, P4_TRANSIENT);
+      sqlite3_log(SQLITE_WARNING, deprecation);
     }
   } else
   if( sqlite3StrICmp(zLeft, "cipher_store_pass")==0 && !zRight ) {
@@ -318,7 +344,6 @@ int sqlcipher_codec_pragma(sqlite3* db, int iDb, Parse *pParse, const char *zLef
     } else {
       char *size = sqlite3_mprintf("%d", sqlcipher_get_default_plaintext_header_size());
       codec_vdbe_return_string(pParse, "cipher_default_plaintext_header_size", size, P4_DYNAMIC);
-      sqlite3_free(size);
     }
   }else
   if( sqlite3StrICmp(zLeft,"cipher_salt")==0 ){
@@ -683,6 +708,9 @@ static void* sqlite3Codec(void *iCtx, void *data, Pgno pgno, int mode) {
         memcpy(buffer, plaintext_header_sz ? pData : (void *) SQLITE_FILE_HEADER, offset); 
 
       rc = sqlcipher_page_cipher(ctx, cctx, pgno, CIPHER_DECRYPT, page_sz - offset, pData + offset, (unsigned char*)buffer + offset);
+#ifdef SQLCIPHER_TEST
+      if(cipher_fail_next_decrypt) rc = SQLITE_ERROR;
+#endif
       if(rc != SQLITE_OK) { /* clear results of failed cipher operation and set error */
         sqlcipher_memset((unsigned char*) buffer+offset, 0, page_sz-offset);
         sqlcipher_codec_ctx_set_error(ctx, rc);
@@ -705,9 +733,13 @@ static void* sqlite3Codec(void *iCtx, void *data, Pgno pgno, int mode) {
         memcpy(buffer, plaintext_header_sz ? pData : kdf_salt, offset); 
       }
       rc = sqlcipher_page_cipher(ctx, cctx, pgno, CIPHER_ENCRYPT, page_sz - offset, pData + offset, (unsigned char*)buffer + offset);
+#ifdef SQLCIPHER_TEST
+      if(cipher_fail_next_encrypt) rc = SQLITE_ERROR;
+#endif
       if(rc != SQLITE_OK) { /* clear results of failed cipher operation and set error */
         sqlcipher_memset((unsigned char*)buffer+offset, 0, page_sz-offset);
         sqlcipher_codec_ctx_set_error(ctx, rc);
+        return NULL;
       }
       return buffer; /* return persistent buffer data, pData remains intact */
       break;
@@ -937,8 +969,6 @@ void sqlite3CodecGetKey(sqlite3* db, int nDb, void **zKey, int *nKey) {
   }
 }
 
-#ifndef OMIT_EXPORT
-
 /*
  * Implementation of an "export" function that allows a caller
  * to duplicate the main database to an attached database. This is intended
@@ -1026,7 +1056,6 @@ void sqlcipher_exportFunc(sqlite3_context *context, int argc, sqlite3_value **ar
   int saved_nChange = db->nChange;      /* Saved value of db->nChange */
   int saved_nTotalChange = db->nTotalChange; /* Saved value of db->nTotalChange */
   u8 saved_mTrace = db->mTrace;        /* Saved value of db->mTrace */
-  int (*saved_xTrace)(u32,void*,void*,void*) = db->xTrace; /* Saved db->xTrace */
   int rc = SQLITE_OK;     /* Return code from service routines */
   char *zSql = NULL;         /* SQL statements */
   char *pzErrMsg = NULL;
@@ -1053,7 +1082,6 @@ void sqlcipher_exportFunc(sqlite3_context *context, int argc, sqlite3_value **ar
   db->flags |= SQLITE_WriteSchema | SQLITE_IgnoreChecks; 
   db->mDbFlags |= DBFLAG_PreferBuiltin | DBFLAG_Vacuum;
   db->flags &= ~(u64)(SQLITE_ForeignKeys | SQLITE_ReverseOrder | SQLITE_Defensive | SQLITE_CountRows); 
-  db->xTrace = 0;
   db->mTrace = 0;
 
   /* Query the schema of the main database. Create a mirror schema
@@ -1133,7 +1161,6 @@ end_of_export:
   db->mDbFlags = saved_mDbFlags;
   db->nChange = saved_nChange;
   db->nTotalChange = saved_nTotalChange;
-  db->xTrace = saved_xTrace;
   db->mTrace = saved_mTrace;
 
   if(zSql) sqlite3_free(zSql);
@@ -1147,8 +1174,5 @@ end_of_export:
     }
   }
 }
-
 #endif
-
 /* END SQLCIPHER */
-#endif

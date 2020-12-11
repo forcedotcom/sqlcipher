@@ -1278,6 +1278,9 @@ int sqlcipher_codec_ctx_integrity_check(codec_ctx *ctx, Parse *pParse, char *col
     int payload_sz = ctx->page_sz - ctx->reserve_sz + ctx->iv_sz;
     int read_sz = ctx->page_sz;
 
+    /* skip integrity check on PAGER_MJ_PGNO since it will have no valid content */
+    if(sqlite3pager_is_mj_pgno(ctx->pBt->pBt->pPager, page)) continue;
+
     if(page==1) {
       int page1_offset = ctx->plaintext_header_sz ? ctx->plaintext_header_sz : FILE_HEADER_SZ;
       read_sz = read_sz - page1_offset;
@@ -1419,7 +1422,7 @@ migrate:
   pDb = &(db->aDb[db->nDb-1]);
   pSrc = pDb->pBt;
 
-  nRes = sqlite3BtreeGetOptimalReserve(pSrc); 
+  nRes = sqlite3BtreeGetRequestedReserve(pSrc);
   /* unset the BTS_PAGESIZE_FIXED flag to avoid SQLITE_READONLY */
   pDest->pBt->btsFlags &= ~BTS_PAGESIZE_FIXED; 
   rc = sqlite3BtreeSetPageSize(pDest, default_page_size, nRes, 0);
