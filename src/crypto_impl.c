@@ -665,6 +665,7 @@ int sqlcipher_codec_ctx_set_plaintext_header_size(codec_ctx *ctx, int size) {
     ctx->plaintext_header_sz = size;
     return SQLITE_OK;
   }
+  ctx->plaintext_header_sz = -1;
   return SQLITE_ERROR;
 } 
 
@@ -1534,11 +1535,13 @@ int sqlcipher_codec_add_random(codec_ctx *ctx, const char *zRight, int random_sz
   return SQLITE_ERROR;
 }
 
+#if !defined(SQLITE_OMIT_TRACE) && !defined(SQLITE_OMIT_DEPRECATED)
 static void sqlcipher_profile_callback(void *file, const char *sql, sqlite3_uint64 run_time){
   FILE *f = (FILE*)file;
   double elapsed = run_time/1000000.0;
   if(f) fprintf(f, "Elapsed time:%.3f ms - %s\n", elapsed, sql);
 }
+#endif
 
 int sqlcipher_cipher_profile(sqlite3 *db, const char *destination){
 #if defined(SQLITE_OMIT_TRACE) || defined(SQLITE_OMIT_DEPRECATED)

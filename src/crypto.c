@@ -330,8 +330,9 @@ int sqlcipher_codec_pragma(sqlite3* db, int iDb, Parse *pParse, const char *zLef
     if(ctx) {
       if( zRight ) {
         int size = atoi(zRight);
-        if((rc = sqlcipher_codec_ctx_set_plaintext_header_size(ctx, size)) != SQLITE_OK)
-          sqlcipher_codec_ctx_set_error(ctx, SQLITE_ERROR); 
+        /* deliberately ignore result code, if size is invalid it will be set to -1
+           and trip the error later in the codec */
+        sqlcipher_codec_ctx_set_plaintext_header_size(ctx, size);
       } else {
         char *size = sqlite3_mprintf("%d", sqlcipher_codec_ctx_get_plaintext_header_size(ctx));
         codec_vdbe_return_string(pParse, "cipher_plaintext_header_size", size, P4_DYNAMIC);
@@ -695,6 +696,14 @@ static void* sqlite3Codec(void *iCtx, void *data, Pgno pgno, int mode) {
   if((rc = sqlcipher_codec_key_derive(ctx)) != SQLITE_OK) {
    sqlcipher_codec_ctx_set_error(ctx, rc); 
    return NULL;
+  }
+
+  /* if the plaintext_header_size is negative that means an invalid size was set via 
+     PRAGMA. We can't set the error state on the pager at that point because the pager
+     may not be open yet. However, this is a fatal error state, so abort the codec */
+  if(plaintext_header_sz < 0) {
+    sqlcipher_codec_ctx_set_error(ctx, SQLITE_ERROR);
+    return NULL;
   }
 
   if(pgno == 1) /* adjust starting pointers in data page for header offset on first page*/   
@@ -1066,13 +1075,29 @@ void sqlcipher_exportFunc(sqlite3_context *context, int argc, sqlite3_value **ar
     goto end_of_export;
   }
 
-  targetDb = (const char*) sqlite3_value_text(argv[0]);
-  sourceDb = (argc == 2) ? (char *) sqlite3_value_text(argv[1]) : "main";
+  if(sqlite3_value_type(argv[0]) == SQLITE_NULL) {
+    rc = SQLITE_ERROR;
+    pzErrMsg = sqlite3_mprintf("target database can't be NULL");
+    goto end_of_export;
+  }
+
+  targetDb = (const char*) sqlite3_value_text(argv[0]); 
+  sourceDb = "main";
+
+  if(argc == 2) {
+    if(sqlite3_value_type(argv[1]) == SQLITE_NULL) {
+      rc = SQLITE_ERROR;
+      pzErrMsg = sqlite3_mprintf("target database can't be NULL");
+      goto end_of_export;
+    }
+    sourceDb = (char *) sqlite3_value_text(argv[1]);
+  }
+
 
   /* if the name of the target is not main, but the index returned is zero 
      there is a mismatch and we should not proceed */
   targetDb_idx =  sqlcipher_find_db_index(db, targetDb);
-  if(targetDb_idx == 0 && sqlite3StrICmp("main", targetDb) != 0) {
+  if(targetDb_idx == 0 && targetDb != NULL && sqlite3StrICmp("main", targetDb) != 0) {
     rc = SQLITE_ERROR;
     pzErrMsg = sqlite3_mprintf("unknown database %s", targetDb);
     goto end_of_export;
@@ -1089,7 +1114,7 @@ void sqlcipher_exportFunc(sqlite3_context *context, int argc, sqlite3_value **ar
   */
   zSql = sqlite3_mprintf(
     "SELECT sql "
-    "  FROM %s.sqlite_master WHERE type='table' AND name!='sqlite_sequence'"
+    "  FROM %s.sqlite_schema WHERE type='table' AND name!='sqlite_sequence'"
     "   AND rootpage>0"
   , sourceDb);
   rc = (zSql == NULL) ? SQLITE_NOMEM : sqlcipher_execExecSql(db, &pzErrMsg, zSql); 
@@ -1098,7 +1123,7 @@ void sqlcipher_exportFunc(sqlite3_context *context, int argc, sqlite3_value **ar
 
   zSql = sqlite3_mprintf(
     "SELECT sql "
-    "  FROM %s.sqlite_master WHERE sql LIKE 'CREATE INDEX %%' "
+    "  FROM %s.sqlite_schema WHERE sql LIKE 'CREATE INDEX %%' "
   , sourceDb);
   rc = (zSql == NULL) ? SQLITE_NOMEM : sqlcipher_execExecSql(db, &pzErrMsg, zSql); 
   if( rc!=SQLITE_OK ) goto end_of_export;
@@ -1106,7 +1131,7 @@ void sqlcipher_exportFunc(sqlite3_context *context, int argc, sqlite3_value **ar
 
   zSql = sqlite3_mprintf(
     "SELECT sql "
-    "  FROM %s.sqlite_master WHERE sql LIKE 'CREATE UNIQUE INDEX %%'"
+    "  FROM %s.sqlite_schema WHERE sql LIKE 'CREATE UNIQUE INDEX %%'"
   , sourceDb);
   rc = (zSql == NULL) ? SQLITE_NOMEM : sqlcipher_execExecSql(db, &pzErrMsg, zSql); 
   if( rc!=SQLITE_OK ) goto end_of_export;
@@ -1119,7 +1144,7 @@ void sqlcipher_exportFunc(sqlite3_context *context, int argc, sqlite3_value **ar
   zSql = sqlite3_mprintf(
     "SELECT 'INSERT INTO %s.' || quote(name) "
     "|| ' SELECT * FROM %s.' || quote(name) || ';'"
-    "FROM %s.sqlite_master "
+    "FROM %s.sqlite_schema "
     "WHERE type = 'table' AND name!='sqlite_sequence' "
     "  AND rootpage>0"
   , targetDb, sourceDb, sourceDb);
@@ -1132,7 +1157,7 @@ void sqlcipher_exportFunc(sqlite3_context *context, int argc, sqlite3_value **ar
   zSql = sqlite3_mprintf(
     "SELECT 'INSERT INTO %s.' || quote(name) "
     "|| ' SELECT * FROM %s.' || quote(name) || ';' "
-    "FROM %s.sqlite_master WHERE name=='sqlite_sequence';"
+    "FROM %s.sqlite_schema WHERE name=='sqlite_sequence';"
   , targetDb, sourceDb, targetDb);
   rc = (zSql == NULL) ? SQLITE_NOMEM : sqlcipher_execExecSql(db, &pzErrMsg, zSql); 
   if( rc!=SQLITE_OK ) goto end_of_export;
@@ -1144,9 +1169,9 @@ void sqlcipher_exportFunc(sqlite3_context *context, int argc, sqlite3_value **ar
   ** from the SQLITE_MASTER table.
   */
   zSql = sqlite3_mprintf(
-    "INSERT INTO %s.sqlite_master "
+    "INSERT INTO %s.sqlite_schema "
     "  SELECT type, name, tbl_name, rootpage, sql"
-    "    FROM %s.sqlite_master"
+    "    FROM %s.sqlite_schema"
     "   WHERE type='view' OR type='trigger'"
     "      OR (type='table' AND rootpage=0)"
   , targetDb, sourceDb);
