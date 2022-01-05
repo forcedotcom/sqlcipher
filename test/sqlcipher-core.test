@@ -730,20 +730,20 @@ db close
 file delete -force test.db
 
 # verify memory security behavior
-# initially should report ON
-# then disable, check that it is off
-# turn it back on, then check. 
+# initially should report OFF
+# then enable, check that it is ON
+# try to turn if off, but verify that it
+# can't be unset.
 do_test verify-memory-security {
     sqlite_orig db test.db
     execsql {
         PRAGMA cipher_memory_security;
-        PRAGMA cipher_memory_security = OFF;
-        PRAGMA cipher_memory_security;
         PRAGMA cipher_memory_security = ON;
         PRAGMA cipher_memory_security;
-        
+        PRAGMA cipher_memory_security = OFF;
+        PRAGMA cipher_memory_security;
     }
-} {1 0 1}
+} {0 1 1}
 db close
 file delete -force test.db
 
@@ -801,4 +801,102 @@ db close
 dba close
 file delete -force test.db
 
+do_test test_flags_fail_encrypt {
+  sqlite_orig db :memory:
+  execsql {
+    PRAGMA cipher_test;
+    PRAGMA cipher_test_on = fail_encrypt;
+    PRAGMA cipher_test;
+    PRAGMA cipher_test_off = fail_encrypt;
+    PRAGMA cipher_test;
+  }
+} {0 1 0}
+db close
+
+do_test test_flags_fail_decrypt {
+  sqlite_orig db :memory:
+  execsql {
+    PRAGMA cipher_test;
+    PRAGMA cipher_test_on = fail_decrypt;
+    PRAGMA cipher_test;
+    PRAGMA cipher_test_off = fail_decrypt;
+    PRAGMA cipher_test;
+  }
+} {0 2 0}
+db close
+
+do_test test_flags_fail_migrate {
+  sqlite_orig db :memory:
+  execsql {
+    PRAGMA cipher_test;
+    PRAGMA cipher_test_on = fail_migrate;
+    PRAGMA cipher_test;
+    PRAGMA cipher_test_off = fail_migrate;
+    PRAGMA cipher_test;
+  }
+} {0 4 0}
+db close
+
+do_test test_flags_combo {
+  sqlite_orig db :memory:
+  execsql {
+    PRAGMA cipher_test;
+    PRAGMA cipher_test_on = fail_encrypt;
+    PRAGMA cipher_test_on = fail_migrate;
+    PRAGMA cipher_test;
+    PRAGMA cipher_test_off = fail_encrypt;
+    PRAGMA cipher_test_off = fail_migrate;
+    PRAGMA cipher_test;
+  }
+} {0 5 0}
+db close
+
+# configure URI filename support
+# create a new encrypted database with the key via parameter
+# close database
+# open normally providing key via pragma verify
+# correct key works
+sqlite3_shutdown
+sqlite3_config_uri 1
+do_test uri-key {
+  sqlite_orig db file:test.db?a=a&key=testkey&c=c
+
+  execsql {
+    CREATE TABLE t1(a,b);
+    INSERT INTO t1 VALUES(1,2);
+  }
+
+  db close
+  sqlite_orig db test.db
+
+  catchsql {
+    PRAGMA key = 'testkey';
+    SELECT count(*) FROM t1;
+  }
+
+  db close
+  sqlite_orig db test.db
+
+  execsql {
+    PRAGMA key = 'testkey';
+    SELECT count(*) FROM t1;
+  }
+
+} {ok 1}
+db close
+
+# verify wrong key fails
+do_test uri-key-2 {
+  sqlite_orig db test.db
+  catchsql {
+    PRAGMA key = 'test';
+    SELECT count(*) FROM t1;
+  }
+} {1 {file is not a database}}
+db close
+file delete -force test.db
+sqlite3_shutdown
+sqlite3_config_uri 0
+
 finish_test
+

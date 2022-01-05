@@ -39,12 +39,6 @@
 #include "sqlcipher_ext.h"
 #endif
 
-#ifdef SQLCIPHER_TEST
-static int cipher_fail_next_encrypt = 0;
-static int cipher_fail_next_decrypt = 0;
-#endif
-
-/* Generate code to return a string value */
 static void codec_vdbe_return_string(Parse *pParse, const char *zLabel, const char *value, int value_type){
   Vdbe *v = sqlite3GetVdbe(pParse);
   sqlite3VdbeSetNumCols(v, 1);
@@ -82,7 +76,7 @@ static int codec_set_btree_to_codec_pagesize(sqlite3 *db, Db *pDb, codec_ctx *ct
 
 static int codec_set_pass_key(sqlite3* db, int nDb, const void *zKey, int nKey, int for_ctx) {
   struct Db *pDb = &db->aDb[nDb];
-  CODEC_TRACE("codec_set_pass_key: entered db=%p nDb=%d zKey=%s nKey=%d for_ctx=%d\n", db, nDb, (char *)zKey, nKey, for_ctx);
+  CODEC_TRACE("codec_set_pass_key: entered db=%p nDb=%d zKey=%p nKey=%d for_ctx=%d\n", db, nDb, zKey, nKey, for_ctx);
   if(pDb->pBt) {
     codec_ctx *ctx = (codec_ctx*) sqlite3PagerGetCodec(pDb->pBt->pBt->pPager);
 
@@ -117,21 +111,39 @@ int sqlcipher_codec_pragma(sqlite3* db, int iDb, Parse *pParse, const char *zLef
   } else
 #endif
 #ifdef SQLCIPHER_TEST
-  if( sqlite3StrICmp(zLeft,"cipher_fail_next_encrypt")==0 ){
+  if( sqlite3StrICmp(zLeft,"cipher_test_on")==0 ){
     if( zRight ) {
-      cipher_fail_next_encrypt = sqlite3GetBoolean(zRight,1);
-    } else {
-      char *fail = sqlite3_mprintf("%d", cipher_fail_next_encrypt);
-      codec_vdbe_return_string(pParse, "cipher_fail_next_encrypt", fail, P4_DYNAMIC);
+      unsigned int flags = sqlcipher_get_test_flags();
+      if(sqlite3StrICmp(zRight, "fail_encrypt")==0) {
+        flags |= TEST_FAIL_ENCRYPT;
+      } else
+      if(sqlite3StrICmp(zRight, "fail_decrypt")==0) {
+        flags |= TEST_FAIL_DECRYPT;
+      } else
+      if(sqlite3StrICmp(zRight, "fail_migrate")==0) {
+        flags |= TEST_FAIL_MIGRATE;
+      }
+      sqlcipher_set_test_flags(flags);
     }
-  }else
-  if( sqlite3StrICmp(zLeft,"cipher_fail_next_decrypt")==0 ){
+  } else
+  if( sqlite3StrICmp(zLeft,"cipher_test_off")==0 ){
     if( zRight ) {
-      cipher_fail_next_decrypt = sqlite3GetBoolean(zRight,1);
-    } else {
-      char *fail = sqlite3_mprintf("%d", cipher_fail_next_decrypt);
-      codec_vdbe_return_string(pParse, "cipher_fail_next_decrypt", fail, P4_DYNAMIC);
+      unsigned int flags = sqlcipher_get_test_flags();
+      if(sqlite3StrICmp(zRight, "fail_encrypt")==0) {
+        flags &= ~TEST_FAIL_ENCRYPT;
+      } else
+      if(sqlite3StrICmp(zRight, "fail_decrypt")==0) {
+        flags &= ~TEST_FAIL_DECRYPT;
+      } else
+      if(sqlite3StrICmp(zRight, "fail_migrate")==0) {
+        flags &= ~TEST_FAIL_MIGRATE;
+      }
+      sqlcipher_set_test_flags(flags);
     }
+  } else
+  if( sqlite3StrICmp(zLeft,"cipher_test")==0 ){
+    char *flags = sqlite3_mprintf("%i", sqlcipher_get_test_flags());
+    codec_vdbe_return_string(pParse, "cipher_test", flags, P4_DYNAMIC);
   }else
 #endif
   if( sqlite3StrICmp(zLeft, "cipher_fips_status")== 0 && !zRight ){
@@ -166,8 +178,12 @@ int sqlcipher_codec_pragma(sqlite3* db, int iDb, Parse *pParse, const char *zLef
   } else
   if( sqlite3StrICmp(zLeft, "cipher_migrate")==0 && !zRight ){
     if(ctx){
-      char *migrate_status = sqlite3_mprintf("%d", sqlcipher_codec_ctx_migrate(ctx));
+      int status = sqlcipher_codec_ctx_migrate(ctx); 
+      char *migrate_status = sqlite3_mprintf("%d", status);
       codec_vdbe_return_string(pParse, "cipher_migrate", migrate_status, P4_DYNAMIC);
+      if(status != SQLITE_OK) {
+        sqlcipher_codec_ctx_set_error(ctx, status);
+      }
     }
   } else
   if( sqlite3StrICmp(zLeft, "cipher_provider")==0 && !zRight ){
@@ -718,7 +734,7 @@ static void* sqlite3Codec(void *iCtx, void *data, Pgno pgno, int mode) {
 
       rc = sqlcipher_page_cipher(ctx, cctx, pgno, CIPHER_DECRYPT, page_sz - offset, pData + offset, (unsigned char*)buffer + offset);
 #ifdef SQLCIPHER_TEST
-      if(cipher_fail_next_decrypt) rc = SQLITE_ERROR;
+      if((sqlcipher_get_test_flags() & TEST_FAIL_ENCRYPT) > 0) rc = SQLITE_ERROR;
 #endif
       if(rc != SQLITE_OK) { /* clear results of failed cipher operation and set error */
         sqlcipher_memset((unsigned char*) buffer+offset, 0, page_sz-offset);
@@ -743,7 +759,7 @@ static void* sqlite3Codec(void *iCtx, void *data, Pgno pgno, int mode) {
       }
       rc = sqlcipher_page_cipher(ctx, cctx, pgno, CIPHER_ENCRYPT, page_sz - offset, pData + offset, (unsigned char*)buffer + offset);
 #ifdef SQLCIPHER_TEST
-      if(cipher_fail_next_encrypt) rc = SQLITE_ERROR;
+      if((sqlcipher_get_test_flags() & TEST_FAIL_DECRYPT) > 0) rc = SQLITE_ERROR;
 #endif
       if(rc != SQLITE_OK) { /* clear results of failed cipher operation and set error */
         sqlcipher_memset((unsigned char*)buffer+offset, 0, page_sz-offset);
@@ -770,7 +786,7 @@ static void sqlite3FreeCodecArg(void *pCodecArg) {
 int sqlite3CodecAttach(sqlite3* db, int nDb, const void *zKey, int nKey) {
   struct Db *pDb = &db->aDb[nDb];
 
-  CODEC_TRACE("sqlite3CodecAttach: entered db=%p, nDb=%d zKey=%s, nKey=%d\n", db, nDb, (char *)zKey, nKey);
+  CODEC_TRACE("sqlite3CodecAttach: entered db=%p, nDb=%d zKey=%p, nKey=%d\n", db, nDb, zKey, nKey);
 
 
   if(nKey && zKey && pDb->pBt) {
@@ -858,12 +874,12 @@ void sqlite3_activate_see(const char* in) {
 }
 
 int sqlite3_key(sqlite3 *db, const void *pKey, int nKey) {
-  CODEC_TRACE("sqlite3_key entered: db=%p pKey=%s nKey=%d\n", db, (char *)pKey, nKey);
+  CODEC_TRACE("sqlite3_key entered: db=%p pKey=%p nKey=%d\n", db, pKey, nKey);
   return sqlite3_key_v2(db, "main", pKey, nKey);
 }
 
 int sqlite3_key_v2(sqlite3 *db, const char *zDb, const void *pKey, int nKey) {
-  CODEC_TRACE("sqlite3_key_v2: entered db=%p zDb=%s pKey=%s nKey=%d\n", db, zDb, (char *)pKey, nKey);
+  CODEC_TRACE("sqlite3_key_v2: entered db=%p zDb=%s pKey=%p nKey=%d\n", db, zDb, pKey, nKey);
   /* attach key if db and pKey are not null and nKey is > 0 */
   if(db && pKey && nKey) {
     int db_index = sqlcipher_find_db_index(db, zDb);
@@ -873,7 +889,7 @@ int sqlite3_key_v2(sqlite3 *db, const char *zDb, const void *pKey, int nKey) {
 }
 
 int sqlite3_rekey(sqlite3 *db, const void *pKey, int nKey) {
-  CODEC_TRACE("sqlite3_rekey entered: db=%p pKey=%s nKey=%d\n", db, (char *)pKey, nKey);
+  CODEC_TRACE("sqlite3_rekey entered: db=%p pKey=%p nKey=%d\n", db, pKey, nKey);
   return sqlite3_rekey_v2(db, "main", pKey, nKey);
 }
 
@@ -888,7 +904,7 @@ int sqlite3_rekey(sqlite3 *db, const void *pKey, int nKey) {
 ** 3. If there is a key present, re-encrypt the database with the new key
 */
 int sqlite3_rekey_v2(sqlite3 *db, const char *zDb, const void *pKey, int nKey) {
-  CODEC_TRACE("sqlite3_rekey_v2: entered db=%p zDb=%s pKey=%s, nKey=%d\n", db, zDb, (char *)pKey, nKey);
+  CODEC_TRACE("sqlite3_rekey_v2: entered db=%p zDb=%s pKey=%p, nKey=%d\n", db, zDb, pKey, nKey);
   if(db && pKey && nKey) {
     int db_index = sqlcipher_find_db_index(db, zDb);
     struct Db *pDb = &db->aDb[db_index];
