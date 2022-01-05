@@ -59,7 +59,7 @@ void sqlite3pager_reset(Pager *pPager);
 #define CIPHER_STR(s) #s
 
 #ifndef CIPHER_VERSION_NUMBER
-#define CIPHER_VERSION_NUMBER 4.4.2
+#define CIPHER_VERSION_NUMBER 4.5.0
 #endif
 
 #ifndef CIPHER_VERSION_BUILD
@@ -190,6 +190,15 @@ static int cipher_isHex(const unsigned char *hex, int sz){
   }
   return 1;
 }
+
+/* possible flags for simulating specific test conditions */
+#ifdef SQLCIPHER_TEST
+#define TEST_FAIL_ENCRYPT 0x01
+#define TEST_FAIL_DECRYPT 0x02
+#define TEST_FAIL_MIGRATE 0x04
+unsigned int sqlcipher_get_test_flags(void);
+void sqlcipher_set_test_flags(unsigned int);
+#endif
 
 /* extensions defined in crypto_impl.c */
 /* the default implementation of SQLCipher uses a cipher_ctx

@@ -115,6 +115,16 @@ void sqlite3Error(sqlite3 *db, int err_code){
 }
 
 /*
+** The equivalent of sqlite3Error(db, SQLITE_OK).  Clear the error state
+** and error message.
+*/
+void sqlite3ErrorClear(sqlite3 *db){
+  assert( db!=0 );
+  db->errCode = SQLITE_OK;
+  if( db->pErr ) sqlite3ValueSetNull(db->pErr);
+}
+
+/*
 ** Load the sqlite3.iSysErrno field if that is an appropriate thing
 ** to do based on the SQLite error code in rc.
 */
@@ -681,6 +691,7 @@ int sqlite3Atoi64(const char *zNum, i64 *pNum, int length, u8 enc){
     incr = 1;
   }else{
     incr = 2;
+    length &= ~1;
     assert( SQLITE_UTF16LE==2 && SQLITE_UTF16BE==3 );
     for(i=3-enc; i<length && zNum[i]==0; i+=2){}
     nonNum = i<length;

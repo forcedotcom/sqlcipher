@@ -237,7 +237,7 @@ do_test unencrypted-corrupt-to-encrypted-export {
 
     PRAGMA writable_schema = ON;
 
-    UPDATE sqlite_master SET sql = 'CREATE TABLE IF NOT EXISTS t1(a,b)' 
+    UPDATE sqlite_schema SET sql = 'CREATE TABLE IF NOT EXISTS t1(a,b)' 
     WHERE tbl_name = 't1';
 
     PRAGMA writable_schema = OFF;
@@ -254,7 +254,7 @@ do_test unencrypted-corrupt-to-encrypted-export {
   sqlite_orig db test2.db
   execsql {
     PRAGMA key = 'testkey2';
-    SELECT count(*) FROM sqlite_master;
+    SELECT count(*) FROM sqlite_schema;
     SELECT count(*) FROM t1;
   }
 } {ok 1 2}
@@ -360,7 +360,8 @@ file delete -force test.db
 
 # open a 1.1.8 database without hmac, then copy the data
 do_test attach-and-copy-1.1.8 {
-  sqlite_orig db $sampleDir/sqlcipher-1.1.8-testkey.db
+  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db test.db
+  sqlite_orig db test.db
   
   execsql {
     PRAGMA key = 'testkey';
@@ -368,14 +369,14 @@ do_test attach-and-copy-1.1.8 {
     PRAGMA kdf_iter = 4000;
     PRAGMA cipher_page_size = 1024;
     PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA1;
-    ATTACH DATABASE 'test.db' AS db2 KEY 'testkey-hmac'; 
+    ATTACH DATABASE 'test-new.db' AS db2 KEY 'testkey-hmac'; 
     CREATE TABLE db2.t1(a,b);
     INSERT INTO db2.t1 SELECT * FROM main.t1;
     DETACH DATABASE db2;
   }
   db close
 
-  sqlite_orig db test.db
+  sqlite_orig db test-new.db
   execsql {
     PRAGMA key = 'testkey-hmac';
     SELECT count(*) FROM t1;
@@ -384,7 +385,7 @@ do_test attach-and-copy-1.1.8 {
 } {ok 75709 1 1 one one 1 2 one two 1 2}
 db close
 file delete -force test.db
-
+file delete -force test-new.db
 
 # open a standard database, then attach a new 
 # database with completely different options. 
@@ -443,6 +444,32 @@ do_test export-error {
 } {1 {unknown database nodb}}
 db close
 file delete -force test.db
+
+# verify sqlcipher_export with NULL parameters
+do_test export-nulls {
+  sqlite_orig db test.db
+
+  catchsql {
+    SELECT sqlcipher_export(NULL);
+  }
+
+} {1 {target database can't be NULL}}
+db close
+file delete -force test.db
+
+do_test export-nulls {
+  sqlite_orig db test.db
+
+  catchsql {
+    SELECT sqlcipher_export('main', NULL);
+  }
+
+} {1 {target database can't be NULL}}
+db close
+file delete -force test.db
+
+
+# use the sqlcipher_export function
 
 # use the sqlcipher_export function
 # to copy a complicated database. 
@@ -655,7 +682,7 @@ file delete -force test-vacuum.db
 # setting as the original 
 do_test default-hmac-kdf-attach {
   file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db test.db
-  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db sqlcipher-1.1.8-testkey.db;
+  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db sqlcipher-1.1.8-testkey.db
   sqlite_orig db test.db
   execsql {
     PRAGMA cipher_default_use_hmac = OFF;
@@ -681,7 +708,7 @@ file delete -force sqlcipher-1.1.8-testkey.db
 # fail because the hmac setting for the 
 # attached database is not compatible
 do_test attach-1.1.8-database-from-2.0-fails {
-  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db sqlcipher-1.1.8-testkey.db;
+  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db sqlcipher-1.1.8-testkey.db
   sqlite_orig db test.db
   catchsql {
     PRAGMA key = 'testkey';
@@ -699,7 +726,7 @@ file delete -force sqlcipher-1.1.8-testkey.db
 # succeed now that hmac is off by default
 # before the attach
 do_test change-default-hmac-kdf-attach {
-  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db sqlcipher-1.1.8-testkey.db;
+  file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db sqlcipher-1.1.8-testkey.db
   sqlite_orig db test.db
   execsql {
     PRAGMA key = 'testkey';
@@ -815,7 +842,7 @@ do_test multipage-schema {
 
   execsql {
     PRAGMA key = 'testkey';
-    SELECT count(*) FROM sqlite_master where type = 'table';
+    SELECT count(*) FROM sqlite_schema where type = 'table';
   } db
 
 } {ok 300}
@@ -849,7 +876,7 @@ do_test multipage-schema-autovacuum-shortread {
 
   execsql {
     PRAGMA key = 'testkey';
-    SELECT count(*) FROM sqlite_master where type = 'table';
+    SELECT count(*) FROM sqlite_schema where type = 'table';
   } db
 
 } {ok 300}
@@ -880,7 +907,7 @@ do_test multipage-schema-autovacuum-shortread-wal {
 
   execsql {
     PRAGMA key = 'testkey';
-    SELECT count(*) FROM sqlite_master where type = 'table';
+    SELECT count(*) FROM sqlite_schema where type = 'table';
   } db
 } {ok 300}
 db close
@@ -1002,7 +1029,7 @@ do_test 2.0-beta-to-2.0-migration {
     PRAGMA cipher_page_size = 1024;
     PRAGMA cipher_hmac_algorithm = HMAC_SHA1;
     PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA1;
-    SELECT count(*) FROM sqlite_master;
+    SELECT count(*) FROM sqlite_schema;
 
     PRAGMA cipher_hmac_salt_mask = "x'3a'";
     ATTACH DATABASE 'test.db' AS db2 KEY 'testkey'; 
@@ -1034,11 +1061,11 @@ do_test migrate-1.1.8-database-to-current-format {
   sqlite_orig db test.db
   execsql {
     PRAGMA key = 'testkey';
-    SELECT count(*) FROM sqlite_master;
+    SELECT count(*) FROM sqlite_schema;
   }
 } {ok 1}
 db close
-file delete -force test.db test.db-migrated test.db-journal
+file delete -force test.db 
 
 do_test migrate-2-0-le-database-to-current-format {
   file copy -force $sampleDir/sqlcipher-2.0-le-testkey.db test.db
@@ -1052,28 +1079,31 @@ do_test migrate-2-0-le-database-to-current-format {
   sqlite_orig db test.db
   execsql {
     PRAGMA key = 'testkey';
-    SELECT count(*) FROM sqlite_master;
+    SELECT count(*) FROM sqlite_schema;
   }
 } {ok 1}
 db close
-file delete -force test.db test.db-migrated test.db-journal
+file delete -force test.db 
 
 do_test migrate-3-0-database-to-current-format {
   file copy -force $sampleDir/sqlcipher-3.0-testkey.db test.db
   sqlite_orig db test.db
-  execsql {
+  set rc {}
+
+  lappend rc [execsql {
     PRAGMA key = 'testkey';
     PRAGMA cipher_migrate;
-  }
+    SELECT count(*) FROM sqlite_schema;
+  }]
   db close
     
   sqlite_orig db test.db
-  execsql {
+  lappend rc [execsql {
     PRAGMA key = 'testkey';
-    SELECT count(*) FROM sqlite_master;
+    SELECT count(*) FROM sqlite_schema;
     PRAGMA journal_mode;
-  }
-} {ok 1 delete}
+  }]
+} {{ok 0 1} {ok 1 delete}}
 db close
 file delete -force test.db
 
@@ -1100,13 +1130,67 @@ do_test migrate-wal-database-to-current {
   sqlite_orig db test.db
   lappend rc [execsql {
     PRAGMA key = 'testkey';
-    SELECT count(*) FROM sqlite_master;
+    SELECT count(*) FROM sqlite_schema;
     PRAGMA journal_mode;
   }]
 } {{ok wal} {ok 0 wal} {ok 1 wal}}
 db close
 file delete -force test.db
 
+# test original database is left untouched after
+# a failed migration e.g. due to low disk space 
+do_test migrate-failure {
+  file copy -force $sampleDir/sqlcipher-3.0-testkey.db test.db
+  sqlite_orig db test.db
+
+  set rc {}
+
+  lappend rc [execsql {
+    PRAGMA key = 'testkey';
+    PRAGMA cipher_test_on = fail_migrate;
+    PRAGMA cipher_migrate;
+  }]
+  db close
+  
+  lappend rc [file exists test.db-migrated]
+
+  sqlite_orig db test.db
+  lappend rc [execsql {
+    PRAGMA key = 'testkey';
+    PRAGMA cipher_test_off = fail_migrate;
+    PRAGMA cipher_compatibility = 3;
+    SELECT count(*) FROM sqlite_schema;
+  }]
+} {{ok 1} 0 {ok 1}}
+db close
+file delete -force test.db 
+
+# leave database is a readable state after a 
+# a failed migration 
+do_test migrate-failure-readable {
+  file copy -force $sampleDir/sqlcipher-3.0-testkey.db test.db
+  sqlite_orig db test.db
+
+  set rc {}
+  lappend rc [execsql {
+    PRAGMA key = 'testkey';
+    PRAGMA cipher_test_on = fail_migrate;
+    PRAGMA cipher_migrate;
+  }]
+
+  lappend rc [catchsql {
+    SELECT count(*) FROM sqlite_schema;
+  }]
+  db close
+
+  sqlite_orig db test.db
+  lappend rc [execsql {
+    PRAGMA cipher_test_off = fail_migrate;
+    PRAGMA cipher_test;
+  }]
+} {{ok 1} {1 {SQL logic error}} 0}
+db close
+file delete -force test.db 
 
 do_test key-database-by-name {
     sqlite_orig db test.db
@@ -1233,6 +1317,7 @@ do_test can-migrate-with-raw-hex-key {
         PRAGMA key = "x'2DD29CA851E7B56E4697B0E1F08507293D761A05CE4D1B628663F411A8086D99'";
         PRAGMA cipher_migrate;
     }
+    db close
 
     sqlite_orig db test.db
     execsql {

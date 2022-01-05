@@ -310,6 +310,10 @@ static GeoPoly *geopolyFuncParam(
   ){
     const unsigned char *a = sqlite3_value_blob(pVal);
     int nVertex;
+    if( a==0 ){
+      sqlite3_result_error_nomem(pCtx);
+      return 0;
+    }
     nVertex = (a[1]<<16) + (a[2]<<8) + a[3];
     if( (a[0]==0 || a[0]==1)
      && (nVertex*2*sizeof(GeoCoord) + 4)==(unsigned int)nByte
@@ -683,7 +687,7 @@ static GeoPoly *geopolyBBox(
       aCoord[2].f = mnY;
       aCoord[3].f = mxY;
     }
-  }else{
+  }else if( aCoord ){
     memset(aCoord, 0, sizeof(RtreeCoord)*4);
   }
   return pOut;
@@ -1075,7 +1079,7 @@ static int geopolyOverlap(GeoPoly *p1, GeoPoly *p2){
   geopolyAddSegments(p, p1, 1);
   geopolyAddSegments(p, p2, 2);
   pThisEvent = geopolySortEventsByX(p->aEvent, p->nEvent);
-  rX = pThisEvent->x==0.0 ? -1.0 : 0.0;
+  rX = pThisEvent && pThisEvent->x==0.0 ? -1.0 : 0.0;
   memset(aOverlap, 0, sizeof(aOverlap));
   while( pThisEvent ){
     if( pThisEvent->x!=rX ){

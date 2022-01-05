@@ -1,6 +1,21 @@
 # SQLCipher Change Log
 All notable changes to this project will be documented in this file.
 
+## [4.5.0] - (October 2021 - [4.5.0 changes])
+- Updates baseline to upstream SQLite 3.36.0
+- Changes the enhanced memory security feature to be DISABLED by default; once enabled by PRAGMA cipher_memory_security = ON, it can't be turned off for the lifetime of the process
+- Changes PRAGMA cipher_migrate to permanently enter an error state if a migration fails
+- Fixes memory locking/unlocking issue with realloc implementation on hardened runtimes when memory security is enabled
+- Fixes cipher_migrate to cleanup the temporary database if a migration fails
+- Removes logging of non-string pointers when compiling with trace level logging
+
+## [4.4.3] - (February 2021 - [4.4.3 changes])
+- Updates baseline to ustream SQLite 3.34.1
+- Fixes sqlcipher_export handling of NULL parameters
+- Removes randomization of rekey-delete tests to avoid false test failures
+- Changes internal usage of sqlite_master to sqlite_schema
+- Omits unusued profiling function under certain defines to avoid compiler warnings
+
 ## [4.4.2] - (November 2020 - [4.4.2 changes])
 - Improve error handling to resolve potential corruption if an encryption operation failed while operating in WAL mode
 - Changes to OpenSSL library cryptographic provider to reduce initialization complexity
@@ -177,9 +192,13 @@ All notable changes to this project will be documented in this file.
 ### Security
 - Change KDF iteration length from 4,000 to 64,000
 
-[unreleased]: https://github.com/sqlcipher/sqlcipher/compare/v4.4.2...prerelease
+[unreleased]: https://github.com/sqlcipher/sqlcipher/compare/v4.5.0...prerelease
+[4.5.0]: https://github.com/sqlcipher/sqlcipher/tree/v4.5.0
+[4.5.0 changes]: https://github.com/sqlcipher/sqlcipher/compare/v4.4.3...v4.5.0
+[4.4.3]: https://github.com/sqlcipher/sqlcipher/tree/v4.4.3
+[4.4.3 changes]: https://github.com/sqlcipher/sqlcipher/compare/v4.4.2...v4.4.3
 [4.4.2]: https://github.com/sqlcipher/sqlcipher/tree/v4.4.2
-[4.4.2 changes]: https://github.com/sqlcipher/sqlcipher/compare/v4.4.0...v4.4.2
+[4.4.2 changes]: https://github.com/sqlcipher/sqlcipher/compare/v4.4.1...v4.4.2
 [4.4.1]: https://github.com/sqlcipher/sqlcipher/tree/v4.4.1
 [4.4.1 changes]: https://github.com/sqlcipher/sqlcipher/compare/v4.4.0...v4.4.1
 [4.4.0]: https://github.com/sqlcipher/sqlcipher/tree/v4.4.0

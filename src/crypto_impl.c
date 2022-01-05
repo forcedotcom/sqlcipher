@@ -35,14 +35,26 @@
 #include "crypto.h"
 #ifndef OMIT_MEMLOCK
 #if defined(__unix__) || defined(__APPLE__) || defined(_AIX)
-#include <errno.h>
-#include <unistd.h>
-#include <sys/resource.h>
-#include <sys/mman.h>
+#include <errno.h> /* amalgamator: dontcache */
+#include <unistd.h> /* amalgamator: dontcache */
+#include <sys/resource.h> /* amalgamator: dontcache */
+#include <sys/mman.h> /* amalgamator: dontcache */
 #elif defined(_WIN32)
 #include <windows.h>
 #endif
 #endif
+
+#ifdef SQLCIPHER_TEST
+static volatile unsigned int cipher_test_flags = 0;
+unsigned int sqlcipher_get_test_flags() {
+  return cipher_test_flags;
+}
+void sqlcipher_set_test_flags(unsigned int flags) {
+  cipher_test_flags = flags;
+}
+#endif
+
+/* Generate code to return a string value */
 
 static volatile unsigned int default_flags = DEFAULT_CIPHER_FLAGS;
 static volatile unsigned char hmac_salt_mask = HMAC_SALT_MASK;
@@ -51,7 +63,7 @@ static volatile int default_page_size = 4096;
 static volatile int default_plaintext_header_sz = 0;
 static volatile int default_hmac_algorithm = SQLCIPHER_HMAC_SHA512;
 static volatile int default_kdf_algorithm = SQLCIPHER_PBKDF2_HMAC_SHA512;
-static volatile int mem_security_on = 1;
+static volatile int mem_security_on = 0;
 static volatile int mem_security_initialized = 0;
 static volatile int mem_security_activated = 0;
 static volatile unsigned int sqlcipher_activate_count = 0;
@@ -95,8 +107,30 @@ static void sqlcipher_mem_free(void *p) {
   default_mem_methods.xFree(p);
 }
 static void *sqlcipher_mem_realloc(void *p, int n) {
-  return default_mem_methods.xRealloc(p, n);
+  void *new = NULL;
+  int orig_sz = 0;
+  if(mem_security_on) {
+    orig_sz = sqlcipher_mem_size(p);
+    if (n==0) {
+      sqlcipher_mem_free(p);
+      return NULL;
+    } else if (!p) {
+      return sqlcipher_mem_malloc(n);
+    } else if(n <= orig_sz) {
+      return p;
+    } else {
+      new = sqlcipher_mem_malloc(n);
+      if(new) {
+        memcpy(new, p, orig_sz);
+        sqlcipher_mem_free(p);
+      }
+      return new;
+    }
+  } else {
+    return default_mem_methods.xRealloc(p, n);
+  }
 }
+
 static int sqlcipher_mem_roundup(int n) {
   return default_mem_methods.xRoundup(n);
 }
@@ -665,6 +699,7 @@ int sqlcipher_codec_ctx_set_plaintext_header_size(codec_ctx *ctx, int size) {
     ctx->plaintext_header_sz = size;
     return SQLITE_OK;
   }
+  ctx->plaintext_header_sz = -1;
   return SQLITE_ERROR;
 } 
 
@@ -813,8 +848,11 @@ int sqlcipher_get_default_pagesize() {
 }
 
 void sqlcipher_set_mem_security(int on) {
-  mem_security_on = on;
-  mem_security_activated = 0;
+  /* memory security can only be enabled, not disabled */
+  if(on) {
+    mem_security_on = on;
+    mem_security_activated = 0;
+  }
 }
 
 int sqlcipher_get_mem_security() {
@@ -942,7 +980,7 @@ void sqlcipher_codec_ctx_free(codec_ctx **iCtx) {
   CODEC_TRACE("codec_ctx_free: entered iCtx=%p\n", iCtx);
   sqlcipher_free(ctx->kdf_salt, ctx->kdf_salt_sz);
   sqlcipher_free(ctx->hmac_kdf_salt, ctx->kdf_salt_sz);
-  sqlcipher_free(ctx->buffer, 0);
+  sqlcipher_free(ctx->buffer, ctx->page_sz);
 
   ctx->provider->ctx_free(&ctx->provider_ctx);
   sqlcipher_free(ctx->provider, sizeof(sqlcipher_provider)); 
@@ -1091,7 +1129,7 @@ error:
   */
 static int sqlcipher_cipher_ctx_key_derive(codec_ctx *ctx, cipher_ctx *c_ctx) {
   int rc;
-  CODEC_TRACE("cipher_ctx_key_derive: entered c_ctx->pass=%s, c_ctx->pass_sz=%d \
+  CODEC_TRACE("cipher_ctx_key_derive: entered c_ctx->pass=%p, c_ctx->pass_sz=%d \
                 ctx->kdf_salt=%p ctx->kdf_salt_sz=%d ctx->kdf_iter=%d \
                 ctx->hmac_kdf_salt=%p, ctx->fast_kdf_iter=%d ctx->key_sz=%d\n",
                 c_ctx->pass, c_ctx->pass_sz, ctx->kdf_salt, ctx->kdf_salt_sz, ctx->kdf_iter,
@@ -1338,7 +1376,7 @@ int sqlcipher_codec_ctx_migrate(codec_ctx *ctx) {
   pass = sqlcipher_malloc(pass_sz+1);
   memset(pass, 0, pass_sz+1);
   memcpy(pass, ctx->read_ctx->pass, pass_sz);
-                                            
+
   /* Version 4 - current, no upgrade required, so exit immediately */
   rc = sqlcipher_check_connection(db_filename, pass, pass_sz, "", &user_version, &journal_mode);
   if(rc == SQLITE_OK){
@@ -1356,6 +1394,7 @@ int sqlcipher_codec_ctx_migrate(codec_ctx *ctx) {
     if(pragma_compat) sqlcipher_free(pragma_compat, sqlite3Strlen30(pragma_compat)); 
     pragma_compat = NULL;
   }
+  
   /* if we exit the loop normally we failed to determine the version, this is an error */
   CODEC_TRACE("Upgrade format not determined\n");
   goto handle_error;
@@ -1402,6 +1441,14 @@ migrate:
     CODEC_TRACE("sqlcipher_export failed, error code %d\n", rc);
     goto handle_error;
   }
+
+#ifdef SQLCIPHER_TEST
+  if((sqlcipher_get_test_flags() & TEST_FAIL_MIGRATE) > 0) {
+    rc = SQLITE_ERROR;
+    CODEC_TRACE("simulated migrate failure, error code %d\n", rc);
+    goto handle_error;
+  }
+#endif
 
   rc = sqlite3_exec(db, set_user_version, NULL, NULL, NULL);
   if(rc != SQLITE_OK){
@@ -1479,10 +1526,6 @@ migrate:
   CODEC_TRACE("DETACH DATABASE called %d\n", rc);
   if(rc != SQLITE_OK) goto cleanup; 
 
-  rc = sqlite3OsDelete(db->pVfs, migrated_db_filename, 0);
-  CODEC_TRACE("deleted migration database: %d\n", rc);
-  if( rc!=SQLITE_OK ) goto handle_error;
-
   sqlite3ResetAllSchemasOfConnection(db);
   CODEC_TRACE("reset all schemas\n");
 
@@ -1495,9 +1538,13 @@ migrate:
 
 handle_error:
   CODEC_TRACE("An error occurred attempting to migrate the database - last error %d\n", rc);
-  rc = SQLITE_ERROR;
 
 cleanup:
+  if(migrated_db_filename) {
+    int del_rc = sqlite3OsDelete(db->pVfs, migrated_db_filename, 0);
+    CODEC_TRACE("deleted migration database: %d\n", del_rc);
+  }
+
   if(pass) sqlcipher_free(pass, pass_sz);
   if(attach_command) sqlcipher_free(attach_command, sqlite3Strlen30(attach_command)); 
   if(migrated_db_filename) sqlcipher_free(migrated_db_filename, sqlite3Strlen30(migrated_db_filename)); 
@@ -1534,11 +1581,13 @@ int sqlcipher_codec_add_random(codec_ctx *ctx, const char *zRight, int random_sz
   return SQLITE_ERROR;
 }
 
+#if !defined(SQLITE_OMIT_TRACE) && !defined(SQLITE_OMIT_DEPRECATED)
 static void sqlcipher_profile_callback(void *file, const char *sql, sqlite3_uint64 run_time){
   FILE *f = (FILE*)file;
   double elapsed = run_time/1000000.0;
   if(f) fprintf(f, "Elapsed time:%.3f ms - %s\n", elapsed, sql);
 }
+#endif
 
 int sqlcipher_cipher_profile(sqlite3 *db, const char *destination){
 #if defined(SQLITE_OMIT_TRACE) || defined(SQLITE_OMIT_DEPRECATED)
