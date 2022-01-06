@@ -32,9 +32,9 @@ The SQLCipher team welcomes contributions to the core library. All contributions
 
 ## Compiling
 
-Building SQLCipher is similar to compiling a regular version of SQLite from source a couple small exceptions:  
+Building SQLCipher is similar to compiling a regular version of SQLite from source, with a couple of small exceptions:
 
- 1. You *must* define `SQLITE_HAS_CODEC` and either `SQLITE_TEMP_STORE=2` or SQLITE_TEMP_STORE=3` 
+ 1. You *must* define `SQLITE_HAS_CODEC` and either `SQLITE_TEMP_STORE=2` or `SQLITE_TEMP_STORE=3`
  2. You will need to link against a support cryptographic provider (OpenSSL, LibTomCrypt, CommonCrypto/Security.framework, or NSS)
  
 The following examples demonstrate linking against OpenSSL, which is a readily available provider on most Unix-like systems. 
@@ -43,17 +43,17 @@ Example 1. Static linking (replace /opt/local/lib with the path to libcrypto.a).
 example, `--enable-tempstore=yes` is setting `SQLITE_TEMP_STORE=2` for the build.
 
 ```
-	$ ./configure --enable-tempstore=yes CFLAGS="-DSQLITE_HAS_CODEC" \
-		LDFLAGS="/opt/local/lib/libcrypto.a"
-	$ make
+$ ./configure --enable-tempstore=yes CFLAGS="-DSQLITE_HAS_CODEC" \
+	LDFLAGS="/opt/local/lib/libcrypto.a"
+$ make
 ```
 
 Example 2. Dynamic linking
 
 ```
-	$ ./configure --enable-tempstore=yes CFLAGS="-DSQLITE_HAS_CODEC" \
-		LDFLAGS="-lcrypto"
-	$ make
+$ ./configure --enable-tempstore=yes CFLAGS="-DSQLITE_HAS_CODEC" \
+	LDFLAGS="-lcrypto"
+$ make
 ```
 
 ## Testing
@@ -65,10 +65,10 @@ As a result, the SQLCipher package includes it's own independent tests that exer
 To run SQLCipher specific tests, configure as described here and run the following to execute the tests and receive a report of the results:
 
 ```
-	$ ./configure --enable-tempstore=yes --enable-fts5 CFLAGS="-DSQLITE_HAS_CODEC -DSQLCIPHER_TEST" \
-		LDFLAGS="-lcrypto"
-  $ make testfixture
-  $ ./testfixture test/sqlcipher.test
+$ ./configure --enable-tempstore=yes --enable-fts5 CFLAGS="-DSQLITE_HAS_CODEC -DSQLCIPHER_TEST" \
+	LDFLAGS="-lcrypto"
+$ make testfixture
+$ ./testfixture test/sqlcipher.test
 ```
 
 ## Encrypting a database
@@ -217,11 +217,11 @@ a stand-alone program.  To install, simply download or build the single
 executable file and put that file someplace on your $PATH.)
 Then run commands like this:
 
-        mkdir ~/sqlite
+        mkdir -p ~/sqlite ~/Fossils
         cd ~/sqlite
-        fossil clone https://www.sqlite.org/src sqlite.fossil
-        fossil open sqlite.fossil
-    
+        fossil clone https://www.sqlite.org/src ~/Fossils/sqlite.fossil
+        fossil open ~/Fossils/sqlite.fossil
+
 After setting up a repository using the steps above, you can always
 update to the lastest version using:
 
@@ -230,7 +230,7 @@ update to the lastest version using:
 
 Or type "fossil ui" to get a web-based user interface.
 
-## Compiling
+## Compiling for Unix-like systems
 
 First create a directory in which to place
 the build products.  It is recommended, but not required, that the
@@ -256,22 +256,22 @@ script does not work out for you, there is a generic makefile named
 can copy and edit to suit your needs.  Comments on the generic makefile
 show what changes are needed.
 
-## Using MSVC
+## Using MSVC for Windows systems
 
 On Windows, all applicable build products can be compiled with MSVC.
 First open the command prompt window associated with the desired compiler
 version (e.g. "Developer Command Prompt for VS2013").  Next, use NMAKE
 with the provided "Makefile.msc" to build one of the supported targets.
 
-For example:
+For example, from the parent directory of the source subtree named "sqlite":
 
         mkdir bld
         cd bld
-        nmake /f Makefile.msc TOP=..\sqlite
-        nmake /f Makefile.msc sqlite3.c TOP=..\sqlite
-        nmake /f Makefile.msc sqlite3.dll TOP=..\sqlite
-        nmake /f Makefile.msc sqlite3.exe TOP=..\sqlite
-        nmake /f Makefile.msc test TOP=..\sqlite
+        nmake /f ..\sqlite\Makefile.msc TOP=..\sqlite
+        nmake /f ..\sqlite\Makefile.msc sqlite3.c TOP=..\sqlite
+        nmake /f ..\sqlite\Makefile.msc sqlite3.dll TOP=..\sqlite
+        nmake /f ..\sqlite\Makefile.msc sqlite3.exe TOP=..\sqlite
+        nmake /f ..\sqlite\Makefile.msc test TOP=..\sqlite
 
 There are several build options that can be set via the NMAKE command
 line.  For example, to build for WinRT, simply add "FOR_WINRT=1" argument
