@@ -201,8 +201,8 @@ static void attachFunc(
 /* BEGIN SQLCIPHER */
 #ifdef SQLITE_HAS_CODEC
   if( rc==SQLITE_OK ){
-    extern int sqlite3CodecAttach(sqlite3*, int, const void*, int);
-    extern void sqlite3CodecGetKey(sqlite3*, int, void**, int*);
+    extern int sqlcipherCodecAttach(sqlite3*, int, const void*, int);
+    extern void sqlcipherCodecGetKey(sqlite3*, int, void**, int*);
     int nKey;
     char *zKey;
     int t = sqlite3_value_type(argv[2]);
@@ -217,16 +217,16 @@ static void attachFunc(
       case SQLITE_BLOB:
         nKey = sqlite3_value_bytes(argv[2]);
         zKey = (char *)sqlite3_value_blob(argv[2]);
-        rc = sqlite3CodecAttach(db, db->nDb-1, zKey, nKey);
+        rc = sqlcipherCodecAttach(db, db->nDb-1, zKey, nKey);
         break;
 
       case SQLITE_NULL:
         /* No key specified.  Use the key from URI filename, or if none,
         ** use the key from the main database. */
         if( sqlite3CodecQueryParameters(db, zName, zPath)==0 ){
-          sqlite3CodecGetKey(db, 0, (void**)&zKey, &nKey);
+          sqlcipherCodecGetKey(db, 0, (void**)&zKey, &nKey);
           if( nKey || sqlite3BtreeGetRequestedReserve(db->aDb[0].pBt)>0 ){
-            rc = sqlite3CodecAttach(db, db->nDb-1, zKey, nKey);
+            rc = sqlcipherCodecAttach(db, db->nDb-1, zKey, nKey);
           }
         }
         break;
@@ -391,7 +391,7 @@ static void codeAttach(
   }
 
 #ifndef SQLITE_OMIT_AUTHORIZATION
-  if( pAuthArg ){
+  if( ALWAYS(pAuthArg) ){
     char *zAuthArg;
     if( pAuthArg->op==TK_STRING ){
       assert( !ExprHasProperty(pAuthArg, EP_IntValue) );
@@ -517,7 +517,11 @@ static int fixSelectCb(Walker *p, Select *pSelect){
       pItem->fg.fromDDL = 1;
     }
 #if !defined(SQLITE_OMIT_VIEW) || !defined(SQLITE_OMIT_TRIGGER)
-    if( sqlite3WalkExpr(&pFix->w, pList->a[i].pOn) ) return WRC_Abort;
+    if( pList->a[i].fg.isUsing==0
+     && sqlite3WalkExpr(&pFix->w, pList->a[i].u3.pOn)
+    ){
+      return WRC_Abort;
+    }
 #endif
   }
   if( pSelect->pWith ){

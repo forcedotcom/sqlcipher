@@ -1,6 +1,15 @@
 # SQLCipher Change Log
 All notable changes to this project will be documented in this file.
 
+## [unreleased] - (? 2022 - [unreleased changes])
+
+## [4.5.2] - (August 2022 - [4.5.2 changes])
+- Updates source code baseline to upstream SQLite 3.39.2
+- Simplifies OpenSSL version conditional code
+- Fixes issue where PRAGMA cipher_memory_security could report OFF when it was actually ON
+- Fixes fix unfreed OpenSSL allocation when compiled against version 3
+- Fixes support for building against recent versions of BoringSSL
+
 ## [4.5.1] - (March 2022 - [4.5.1 changes])
 - Updates source code baseline to upstream SQLite 3.37.2
 - Adds PRAGMA cipher_log and cipher_log_level features to allow logging of TRACE, DEBUG, INFO, WARN, and ERROR messages to stdout, stderr, file, or logcat
@@ -201,7 +210,9 @@ All notable changes to this project will be documented in this file.
 ### Security
 - Change KDF iteration length from 4,000 to 64,000
 
-[unreleased]: https://github.com/sqlcipher/sqlcipher/compare/v4.5.1...prerelease
+[unreleased]: https://github.com/sqlcipher/sqlcipher/compare/v4.5.2...prerelease
+[4.5.2]: https://github.com/sqlcipher/sqlcipher/tree/v4.5.2
+[4.5.2 changes]: https://github.com/sqlcipher/sqlcipher/compare/v4.5.1...v4.5.2
 [4.5.1]: https://github.com/sqlcipher/sqlcipher/tree/v4.5.1
 [4.5.1 changes]: https://github.com/sqlcipher/sqlcipher/compare/v4.5.0...v4.5.1
 [4.5.0]: https://github.com/sqlcipher/sqlcipher/tree/v4.5.0

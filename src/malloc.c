@@ -761,8 +761,9 @@ char *sqlite3DbSpanDup(sqlite3 *db, const char *zStart, const char *zEnd){
 ** Free any prior content in *pz and replace it with a copy of zNew.
 */
 void sqlite3SetString(char **pz, sqlite3 *db, const char *zNew){
+  char *z = sqlite3DbStrDup(db, zNew);
   sqlite3DbFree(db, *pz);
-  *pz = sqlite3DbStrDup(db, zNew);
+  *pz = z;
 }
 
 /*
@@ -770,8 +771,15 @@ void sqlite3SetString(char **pz, sqlite3 *db, const char *zNew){
 ** has happened.  This routine will set db->mallocFailed, and also
 ** temporarily disable the lookaside memory allocator and interrupt
 ** any running VDBEs.
+**
+** Always return a NULL pointer so that this routine can be invoked using
+**
+**      return sqlite3OomFault(db);
+**
+** and thereby avoid unnecessary stack frame allocations for the overwhelmingly
+** common case where no OOM occurs.
 */
-void sqlite3OomFault(sqlite3 *db){
+void *sqlite3OomFault(sqlite3 *db){
   if( db->mallocFailed==0 && db->bBenignMalloc==0 ){
     db->mallocFailed = 1;
     if( db->nVdbeExec>0 ){
@@ -779,9 +787,11 @@ void sqlite3OomFault(sqlite3 *db){
     }
     DisableLookaside;
     if( db->pParse ){
+      sqlite3ErrorMsg(db->pParse, "out of memory");
       db->pParse->rc = SQLITE_NOMEM_BKPT;
     }
   }
+  return 0;
 }
 
 /*

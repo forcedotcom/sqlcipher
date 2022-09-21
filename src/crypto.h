@@ -38,15 +38,35 @@
 #include "sqliteInt.h"
 #include "btreeInt.h"
 #include "pager.h"
+#include "vdbeInt.h"
 
 #ifdef __ANDROID__
 #include <android/log.h>
 #endif
 
+#include <time.h>
+
+#if defined(_WIN32) || defined(SQLITE_OS_WINRT)
+#include <windows.h> /*  amalgamator: dontcache */
+#else
+#include <sys/time.h> /* amalgamator: dontcache */
+#endif
+
+#ifndef OMIT_MEMLOCK
+#if defined(__unix__) || defined(__APPLE__) || defined(_AIX)
+#include <errno.h> /* amalgamator: dontcache */
+#include <unistd.h> /* amalgamator: dontcache */
+#include <sys/resource.h> /* amalgamator: dontcache */
+#include <sys/mman.h> /* amalgamator: dontcache */
+#endif
+#endif
+
+#include "sqlcipher.h"
+
 /* extensions defined in pager.c */ 
-void *sqlite3PagerGetCodec(Pager*);
-void sqlite3PagerSetCodec(Pager*, void *(*)(void*,void*,Pgno,int),  void (*)(void*,int,int),  void (*)(void*), void *);
-int sqlite3pager_is_mj_pgno(Pager*, Pgno);
+void *sqlcipherPagerGetCodec(Pager*);
+void sqlcipherPagerSetCodec(Pager*, void *(*)(void*,void*,Pgno,int),  void (*)(void*,int,int),  void (*)(void*), void *);
+int sqlite3pager_is_sj_pgno(Pager*, Pgno);
 void sqlite3pager_error(Pager*, int);
 void sqlite3pager_reset(Pager *pPager);
 /* end extensions defined in pager.c */
@@ -64,7 +84,7 @@ void sqlite3pager_reset(Pager *pPager);
 #define CIPHER_STR(s) #s
 
 #ifndef CIPHER_VERSION_NUMBER
-#define CIPHER_VERSION_NUMBER 4.5.1
+#define CIPHER_VERSION_NUMBER 4.5.2
 #endif
 
 #ifndef CIPHER_VERSION_BUILD
@@ -209,8 +229,8 @@ typedef struct {
 
 /* crypto.c functions */
 int sqlcipher_codec_pragma(sqlite3*, int, Parse*, const char *, const char*);
-int sqlite3CodecAttach(sqlite3*, int, const void *, int);
-void sqlite3CodecGetKey(sqlite3*, int, void**, int*);
+int sqlcipherCodecAttach(sqlite3*, int, const void *, int);
+void sqlcipherCodecGetKey(sqlite3*, int, void**, int*);
 void sqlcipher_exportFunc(sqlite3_context *, int, sqlite3_value **);
 
 /* crypto_impl.c functions */

@@ -293,7 +293,8 @@ proc copy_file {filename} {
           # Add the SQLITE_PRIVATE before variable declarations or
           # definitions for internal use
           regsub {^SQLITE_API } $line {} line
-          if {![regexp {^sqlite3_} $varname]} {
+          if {![regexp {^sqlite3_} $varname]
+              && ![regexp {^sqlite3Show[A-Z]} $varname]} {
             regsub {^extern } $line {} line
             puts $out "SQLITE_PRIVATE $line"
           } else {
@@ -331,13 +332,6 @@ foreach file {
    sqliteInt.h
    os_common.h
    ctime.c
-
-   crypto.c
-   crypto_impl.c
-   crypto_libtomcrypt.c
-   crypto_nss.c
-   crypto_openssl.c
-   crypto_cc.c
 
    global.c
    status.c
@@ -389,6 +383,13 @@ foreach file {
    vdbevtab.c
    memjournal.c
 
+   crypto.c
+   crypto_impl.c
+   crypto_libtomcrypt.c
+   crypto_nss.c
+   crypto_openssl.c
+   crypto_cc.c
+
    walker.c
    resolve.c
    expr.c
@@ -439,7 +440,7 @@ foreach file {
    fts3_unicode.c
    fts3_unicode2.c
 
-   json1.c
+   json.c
    rtree.c
    icu.c
 
