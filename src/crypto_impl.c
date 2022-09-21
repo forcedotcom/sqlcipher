@@ -33,22 +33,6 @@
 
 #include "sqlcipher.h"
 #include "crypto.h"
-#include <time.h>
-
-#if defined(_WIN32) || defined(SQLITE_OS_WINRT)
-#include <windows.h> /*  amalgamator: dontcache */
-#else
-#include <sys/time.h> /* amalgamator: dontcache */
-#endif
-
-#ifndef OMIT_MEMLOCK
-#if defined(__unix__) || defined(__APPLE__) || defined(_AIX)
-#include <errno.h> /* amalgamator: dontcache */
-#include <unistd.h> /* amalgamator: dontcache */
-#include <sys/resource.h> /* amalgamator: dontcache */
-#include <sys/mman.h> /* amalgamator: dontcache */
-#endif
-#endif
 
 #ifdef SQLCIPHER_TEST
 static volatile unsigned int cipher_test_flags = 0;
@@ -86,15 +70,15 @@ static volatile int default_page_size = 4096;
 static volatile int default_plaintext_header_sz = 0;
 static volatile int default_hmac_algorithm = SQLCIPHER_HMAC_SHA512;
 static volatile int default_kdf_algorithm = SQLCIPHER_PBKDF2_HMAC_SHA512;
-static volatile int mem_security_on = 0;
-static volatile int mem_security_initialized = 0;
-static volatile int mem_security_activated = 0;
+static volatile int sqlcipher_mem_security_on = 0;
+static volatile int sqlcipher_mem_executed = 0;
+static volatile int sqlcipher_mem_initialized = 0;
 static volatile unsigned int sqlcipher_activate_count = 0;
 static volatile sqlite3_mem_methods default_mem_methods;
 static sqlcipher_provider *default_provider = NULL;
 
 static sqlite3_mutex* sqlcipher_static_mutex[SQLCIPHER_MUTEX_COUNT];
-static volatile FILE* sqlcipher_log_file = NULL;
+static FILE* sqlcipher_log_file = NULL;
 static volatile int sqlcipher_log_logcat = 0;
 static volatile unsigned int sqlcipher_log_level = SQLCIPHER_LOG_NONE;
 
@@ -111,10 +95,10 @@ static void sqlcipher_mem_shutdown(void *pAppData) {
 }
 static void *sqlcipher_mem_malloc(int n) {
   void *ptr = default_mem_methods.xMalloc(n);
-  if(mem_security_on) {
+  if(!sqlcipher_mem_executed) sqlcipher_mem_executed = 1;
+  if(sqlcipher_mem_security_on) {
     sqlcipher_log(SQLCIPHER_LOG_TRACE, "sqlcipher_mem_malloc: calling sqlcipher_mlock(%p,%d)", ptr, n);
     sqlcipher_mlock(ptr, n); 
-    if(!mem_security_activated) mem_security_activated = 1;
   }
   return ptr;
 }
@@ -123,19 +107,19 @@ static int sqlcipher_mem_size(void *p) {
 }
 static void sqlcipher_mem_free(void *p) {
   int sz;
-  if(mem_security_on) {
+  if(!sqlcipher_mem_executed) sqlcipher_mem_executed = 1;
+  if(sqlcipher_mem_security_on) {
     sz = sqlcipher_mem_size(p);
     sqlcipher_log(SQLCIPHER_LOG_TRACE, "sqlcipher_mem_free: calling sqlcipher_memset(%p,0,%d) and sqlcipher_munlock(%p, %d)", p, sz, p, sz);
     sqlcipher_memset(p, 0, sz);
     sqlcipher_munlock(p, sz);
-    if(!mem_security_activated) mem_security_activated = 1;
   }
   default_mem_methods.xFree(p);
 }
 static void *sqlcipher_mem_realloc(void *p, int n) {
   void *new = NULL;
   int orig_sz = 0;
-  if(mem_security_on) {
+  if(sqlcipher_mem_security_on) {
     orig_sz = sqlcipher_mem_size(p);
     if (n==0) {
       sqlcipher_mem_free(p);
@@ -173,12 +157,13 @@ static sqlite3_mem_methods sqlcipher_mem_methods = {
 };
 
 void sqlcipher_init_memmethods() {
-  if(mem_security_initialized) return;
+  if(sqlcipher_mem_initialized) return;
   if(sqlite3_config(SQLITE_CONFIG_GETMALLOC, &default_mem_methods) != SQLITE_OK ||
      sqlite3_config(SQLITE_CONFIG_MALLOC, &sqlcipher_mem_methods)  != SQLITE_OK) {
-    mem_security_on = mem_security_activated = 0;
+     sqlcipher_mem_security_on = sqlcipher_mem_executed = sqlcipher_mem_initialized = 0;
+  } else {
+    sqlcipher_mem_initialized = 1;
   }
-  mem_security_initialized = 1;
 }
 
 int sqlcipher_register_provider(sqlcipher_provider *p) {
@@ -299,8 +284,8 @@ void sqlcipher_deactivate() {
    optimized out by the compiler. 
    Note: As suggested by Joachim Schipper (joachim.schipper@fox-it.com)
 */
-void* sqlcipher_memset(void *v, unsigned char value, u64 len) {
-  u64 i = 0;
+void* sqlcipher_memset(void *v, unsigned char value, sqlite_uint64 len) {
+  sqlite_uint64 i = 0;
   volatile unsigned char *a = v;
 
   if (v == NULL) return v;
@@ -316,9 +301,9 @@ void* sqlcipher_memset(void *v, unsigned char value, u64 len) {
 /* constant time memory check tests every position of a memory segement
    matches a single value (i.e. the memory is all zeros)
    returns 0 if match, 1 of no match */
-int sqlcipher_ismemset(const void *v, unsigned char value, u64 len) {
+int sqlcipher_ismemset(const void *v, unsigned char value, sqlite_uint64 len) {
   const unsigned char *a = v;
-  u64 i = 0, result = 0;
+  sqlite_uint64 i = 0, result = 0;
 
   for(i = 0; i < len; i++) {
     result |= a[i] ^ value;
@@ -340,7 +325,7 @@ int sqlcipher_memcmp(const void *v0, const void *v1, int len) {
   return (result != 0);
 }
 
-void sqlcipher_mlock(void *ptr, u64 sz) {
+void sqlcipher_mlock(void *ptr, sqlite_uint64 sz) {
 #ifndef OMIT_MEMLOCK
 #if defined(__unix__) || defined(__APPLE__) 
   int rc;
@@ -367,7 +352,7 @@ void sqlcipher_mlock(void *ptr, u64 sz) {
 #endif
 }
 
-void sqlcipher_munlock(void *ptr, u64 sz) {
+void sqlcipher_munlock(void *ptr, sqlite_uint64 sz) {
 #ifndef OMIT_MEMLOCK
 #if defined(__unix__) || defined(__APPLE__) 
   int rc;
@@ -402,7 +387,7 @@ void sqlcipher_munlock(void *ptr, u64 sz) {
   * If sz is > 0, and not compiled with OMIT_MEMLOCK, system will attempt to unlock the
   * memory segment so it can be paged
   */
-void sqlcipher_free(void *ptr, u64 sz) {
+void sqlcipher_free(void *ptr, sqlite_uint64 sz) {
   sqlcipher_log(SQLCIPHER_LOG_TRACE, "sqlcipher_free: calling sqlcipher_memset(%p,0,%llu)", ptr, sz);
   sqlcipher_memset(ptr, 0, sz);
   sqlcipher_munlock(ptr, sz);
@@ -414,7 +399,7 @@ void sqlcipher_free(void *ptr, u64 sz) {
   * reference counted and leak detection works. Unless compiled with OMIT_MEMLOCK
   * attempts to lock the memory pages so sensitive information won't be swapped
   */
-void* sqlcipher_malloc(u64 sz) {
+void* sqlcipher_malloc(sqlite_uint64 sz) {
   void *ptr;
   sqlcipher_log(SQLCIPHER_LOG_TRACE, "sqlcipher_malloc: calling sqlite3Malloc(%llu)", sz);
   ptr = sqlite3Malloc(sz);
@@ -882,13 +867,16 @@ int sqlcipher_get_default_pagesize() {
 void sqlcipher_set_mem_security(int on) {
   /* memory security can only be enabled, not disabled */
   if(on) {
-    mem_security_on = on;
-    mem_security_activated = 0;
+    sqlcipher_log(SQLCIPHER_LOG_DEBUG, "sqlcipher_set_mem_security: on");
+    sqlcipher_mem_security_on = on;
   }
 }
 
 int sqlcipher_get_mem_security() {
-  return mem_security_on && mem_security_activated;
+  /* only report that memory security is enabled if pragma cipher_memory_security is ON and 
+     SQLCipher's allocator/deallocator was run at least one timecurrently used */ 
+  sqlcipher_log(SQLCIPHER_LOG_DEBUG, "sqlcipher_get_mem_security: sqlcipher_mem_security_on = %d, sqlcipher_mem_executed = %d", sqlcipher_mem_security_on, sqlcipher_mem_executed);
+  return sqlcipher_mem_security_on && sqlcipher_mem_executed;
 }
 
 
@@ -1390,8 +1378,8 @@ int sqlcipher_codec_ctx_integrity_check(codec_ctx *ctx, Parse *pParse, char *col
     int payload_sz = ctx->page_sz - ctx->reserve_sz + ctx->iv_sz;
     int read_sz = ctx->page_sz;
 
-    /* skip integrity check on PAGER_MJ_PGNO since it will have no valid content */
-    if(sqlite3pager_is_mj_pgno(ctx->pBt->pBt->pPager, page)) continue;
+    /* skip integrity check on PAGER_SJ_PGNO since it will have no valid content */
+    if(sqlite3pager_is_sj_pgno(ctx->pBt->pBt->pPager, page)) continue;
 
     if(page==1) {
       int page1_offset = ctx->plaintext_header_sz ? ctx->plaintext_header_sz : FILE_HEADER_SZ;
@@ -1550,8 +1538,8 @@ migrate:
   sqlcipher_log(SQLCIPHER_LOG_DEBUG, "set btree page size to %d res %d rc %d", default_page_size, nRes, rc);
   if( rc!=SQLITE_OK ) goto handle_error;
 
-  sqlite3CodecGetKey(db, db->nDb - 1, (void**)&keyspec, &keyspec_sz);
-  sqlite3CodecAttach(db, 0, keyspec, keyspec_sz);
+  sqlcipherCodecGetKey(db, db->nDb - 1, (void**)&keyspec, &keyspec_sz);
+  sqlcipherCodecAttach(db, 0, keyspec, keyspec_sz);
   
   srcfile = sqlite3PagerFile(pSrc->pBt->pPager);
   destfile = sqlite3PagerFile(pDest->pBt->pPager);
