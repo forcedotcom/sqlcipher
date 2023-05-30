@@ -605,14 +605,17 @@ do_execsql_test misc1-19.2 {
   SELECT * FROM t19b;
 } {4 5 6}
 
-# 2015-05-20:  CREATE TABLE AS should not store INT value is a TEXT
+# 2015-05-20:  CREATE TABLE AS should not store INT value in a TEXT
 # column.
+#
+# 2022-12-14:  Change:  The column is not TEXT if the AS SELECT is
+# a compound with different types on each arm.
 #
 do_execsql_test misc1-19.3 {
   CREATE TABLE t19c(x TEXT);
   CREATE TABLE t19d AS SELECT * FROM t19c UNION ALL SELECT 1234;
   SELECT x, typeof(x) FROM t19d;
-} {1234 text}
+} {1234 integer}
 
 # 2014-05-16:  Tests for the SQLITE_TESTCTRL_FAULT_INSTALL feature.
 #
@@ -622,11 +625,11 @@ proc fault_callback {n} {
   lappend ::fault_callbacks $n
   return 0
 }
-do_test misc1-19.1 {
+do_test misc1-19.11 {
   sqlite3_test_control_fault_install fault_callback
   set fault_callbacks
 } {0}
-do_test misc1-19.2 {
+do_test misc1-19.12 {
   sqlite3_test_control_fault_install
   set fault_callbacks
 } {0}
@@ -652,7 +655,7 @@ do_catchsql_test misc1-21.2 {
 
 # 2015-04-15
 do_execsql_test misc1-22.1 {
-  SELECT ""+3 FROM (SELECT ""+5);
+  SELECT ''+3 FROM (SELECT ''+5);
 } {3}
 
 # 2015-04-19: NULL pointer dereference on a corrupt schema
@@ -728,7 +731,14 @@ do_execsql_test misc1-26.0 {
 # 2017-12-29
 #
 # The following behaviors (duplicate column names on an INSERT or UPDATE)
-# are undocumented.  These tests are added to ensure that historical behavior
+# are undocumented.  <<---  Not so.  There is a long-standing requirement
+# in lang_update.in to say that when the columns to be updated appear more
+# than once in an UPDATE statement that only the rightmost expression is used.
+# See e_update-1.6.* for the tests.  This is unfortunate, since omitting
+# that requirement would greatly simplify the fix to the problem identified
+# by forum post https://sqlite.org/forum/info/16ca0e9f32c38567
+#
+# These tests are added to ensure that historical behavior
 # does not change accidentally.
 #
 # For duplication columns on an INSERT, the first value is used.

@@ -151,8 +151,8 @@ SQLITE_NOINLINE int sqlite3RunVacuum(
   Btree *pTemp;           /* The temporary database we vacuum into */
   u32 saved_mDbFlags;     /* Saved value of db->mDbFlags */
   u64 saved_flags;        /* Saved value of db->flags */
-  int saved_nChange;      /* Saved value of db->nChange */
-  int saved_nTotalChange; /* Saved value of db->nTotalChange */
+  i64 saved_nChange;      /* Saved value of db->nChange */
+  i64 saved_nTotalChange; /* Saved value of db->nTotalChange */
   u32 saved_openFlags;    /* Saved value of db->openFlags */
   u8 saved_mTrace;        /* Saved trace settings */
   Db *pDb = 0;            /* Database to detach at end of vacuum */
@@ -161,6 +161,7 @@ SQLITE_NOINLINE int sqlite3RunVacuum(
   int nDb;                /* Number of attached databases */
   const char *zDbMain;    /* Schema name of database to vacuum */
   const char *zOut;       /* Name of output file */
+  u32 pgflags = PAGER_SYNCHRONOUS_OFF; /* sync flags for output db */
 
   if( !db->autoCommit ){
     sqlite3SetString(pzErrMsg, db, "cannot VACUUM from within a transaction");
@@ -232,6 +233,11 @@ SQLITE_NOINLINE int sqlite3RunVacuum(
       goto end_of_vacuum;
     }
     db->mDbFlags |= DBFLAG_VacuumInto;
+
+    /* For a VACUUM INTO, the pager-flags are set to the same values as
+    ** they are for the database being vacuumed, except that PAGER_CACHESPILL
+    ** is always set. */
+    pgflags = db->aDb[iDb].safety_level | (db->flags & PAGER_FLAGS_MASK);
   }
   nRes = sqlite3BtreeGetRequestedReserve(pMain);
 
@@ -239,10 +245,10 @@ SQLITE_NOINLINE int sqlite3RunVacuum(
 /* BEGIN SQLCIPHER */
 #ifdef SQLITE_HAS_CODEC
   if( db->nextPagesize ){
-    extern void sqlite3CodecGetKey(sqlite3*, int, void**, int*);
+    extern void sqlcipherCodecGetKey(sqlite3*, int, void**, int*);
     int nKey;
     char *zKey;
-    sqlite3CodecGetKey(db, iDb, (void**)&zKey, &nKey);
+    sqlcipherCodecGetKey(db, iDb, (void**)&zKey, &nKey);
     if( nKey ) db->nextPagesize = 0;
   }
 #endif
@@ -250,7 +256,7 @@ SQLITE_NOINLINE int sqlite3RunVacuum(
 
   sqlite3BtreeSetCacheSize(pTemp, db->aDb[iDb].pSchema->cache_size);
   sqlite3BtreeSetSpillSize(pTemp, sqlite3BtreeSetSpillSize(pMain,0));
-  sqlite3BtreeSetPagerFlags(pTemp, PAGER_SYNCHRONOUS_OFF|PAGER_CACHESPILL);
+  sqlite3BtreeSetPagerFlags(pTemp, pgflags|PAGER_CACHESPILL);
 
   /* Begin a transaction and take an exclusive lock on the main database
   ** file. This is done before the sqlite3BtreeGetPageSize(pMain) call below,
@@ -263,7 +269,9 @@ SQLITE_NOINLINE int sqlite3RunVacuum(
 
   /* Do not attempt to change the page size for a WAL database */
   if( sqlite3PagerGetJournalMode(sqlite3BtreePager(pMain))
-                                               ==PAGER_JOURNALMODE_WAL ){
+                                               ==PAGER_JOURNALMODE_WAL
+   && pOut==0
+  ){
     db->nextPagesize = 0;
   }
 
@@ -379,6 +387,7 @@ SQLITE_NOINLINE int sqlite3RunVacuum(
 
   assert( rc==SQLITE_OK );
   if( pOut==0 ){
+    nRes = sqlite3BtreeGetRequestedReserve(pTemp);
     rc = sqlite3BtreeSetPageSize(pMain, sqlite3BtreeGetPageSize(pTemp), nRes,1);
   }
 
