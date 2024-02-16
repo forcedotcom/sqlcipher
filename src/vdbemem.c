@@ -157,6 +157,7 @@ int sqlite3VdbeMemValidStrRep(Mem *p){
   char *z;
   int i, j, incr;
   if( (p->flags & MEM_Str)==0 ) return 1;
+  if( p->db && p->db->mallocFailed ) return 1;
   if( p->flags & MEM_Term ){
     /* Insure that the string is properly zero-terminated.  Pay particular
     ** attention to the case where p->n is odd */
@@ -314,6 +315,40 @@ int sqlite3VdbeMemClearAndResize(Mem *pMem, int szNew){
 }
 
 /*
+** If pMem is already a string, detect if it is a zero-terminated
+** string, or make it into one if possible, and mark it as such.
+**
+** This is an optimization.  Correct operation continues even if
+** this routine is a no-op.
+*/
+void sqlite3VdbeMemZeroTerminateIfAble(Mem *pMem){
+  if( (pMem->flags & (MEM_Str|MEM_Term|MEM_Ephem|MEM_Static))!=MEM_Str ){
+    /* pMem must be a string, and it cannot be an ephemeral or static string */
+    return;
+  }
+  if( pMem->enc!=SQLITE_UTF8 ) return;
+  if( NEVER(pMem->z==0) ) return;
+  if( pMem->flags & MEM_Dyn ){
+    if( pMem->xDel==sqlite3_free
+     && sqlite3_msize(pMem->z) >= (u64)(pMem->n+1)
+    ){
+      pMem->z[pMem->n] = 0;
+      pMem->flags |= MEM_Term;
+      return;
+    }
+    if( pMem->xDel==sqlite3RCStrUnref ){
+      /* Blindly assume that all RCStr objects are zero-terminated */
+      pMem->flags |= MEM_Term;
+      return;
+    }
+  }else if( pMem->szMalloc >= pMem->n+1 ){
+    pMem->z[pMem->n] = 0;
+    pMem->flags |= MEM_Term;
+    return;
+  }
+}
+
+/*
 ** It is already known that pMem contains an unterminated string.
 ** Add the zero terminator.
 **
@@ -439,7 +474,7 @@ int sqlite3VdbeMemStringify(Mem *pMem, u8 enc, u8 bForce){
 
   vdbeMemRenderNum(nByte, pMem->z, pMem);
   assert( pMem->z!=0 );
-  assert( pMem->n==sqlite3Strlen30NN(pMem->z) );
+  assert( pMem->n==(int)sqlite3Strlen30NN(pMem->z) );
   pMem->enc = SQLITE_UTF8;
   pMem->flags |= MEM_Str|MEM_Term;
   if( bForce ) pMem->flags &= ~(MEM_Int|MEM_Real|MEM_IntReal);
@@ -575,36 +610,6 @@ void sqlite3VdbeMemReleaseMalloc(Mem *p){
 }
 
 /*
-** Convert a 64-bit IEEE double into a 64-bit signed integer.
-** If the double is out of range of a 64-bit signed integer then
-** return the closest available 64-bit signed integer.
-*/
-static SQLITE_NOINLINE i64 doubleToInt64(double r){
-#ifdef SQLITE_OMIT_FLOATING_POINT
-  /* When floating-point is omitted, double and int64 are the same thing */
-  return r;
-#else
-  /*
-  ** Many compilers we encounter do not define constants for the
-  ** minimum and maximum 64-bit integers, or they define them
-  ** inconsistently.  And many do not understand the "LL" notation.
-  ** So we define our own static constants here using nothing
-  ** larger than a 32-bit integer constant.
-  */
-  static const i64 maxInt = LARGEST_INT64;
-  static const i64 minInt = SMALLEST_INT64;
-
-  if( r<=(double)minInt ){
-    return minInt;
-  }else if( r>=(double)maxInt ){
-    return maxInt;
-  }else{
-    return (i64)r;
-  }
-#endif
-}
-
-/*
 ** Return some kind of integer value which is the best we can do
 ** at representing the value that *pMem describes as an integer.
 ** If pMem is an integer, then the value is exact.  If pMem is
@@ -630,7 +635,7 @@ i64 sqlite3VdbeIntValue(const Mem *pMem){
     testcase( flags & MEM_IntReal );
     return pMem->u.i;
   }else if( flags & MEM_Real ){
-    return doubleToInt64(pMem->u.r);
+    return sqlite3RealToI64(pMem->u.r);
   }else if( (flags & (MEM_Str|MEM_Blob))!=0 && pMem->z!=0 ){
     return memIntValue(pMem);
   }else{
@@ -692,7 +697,7 @@ void sqlite3VdbeIntegerAffinity(Mem *pMem){
   if( pMem->flags & MEM_IntReal ){
     MemSetTypeFlag(pMem, MEM_Int);
   }else{
-    i64 ix = doubleToInt64(pMem->u.r);
+    i64 ix = sqlite3RealToI64(pMem->u.r);
 
     /* Only mark the value as an integer if
     **
@@ -760,8 +765,8 @@ int sqlite3RealSameAsInt(double r1, sqlite3_int64 i){
 ** from UBSAN.
 */
 i64 sqlite3RealToI64(double r){
-  if( r<=(double)SMALLEST_INT64 ) return SMALLEST_INT64;
-  if( r>=(double)LARGEST_INT64) return LARGEST_INT64;
+  if( r<-9223372036854774784.0 ) return SMALLEST_INT64;
+  if( r>+9223372036854774784.0 ) return LARGEST_INT64;
   return (i64)r;
 }
 
@@ -832,6 +837,7 @@ int sqlite3VdbeMemCast(Mem *pMem, u8 aff, u8 encoding){
       break;
     }
     default: {
+      int rc;
       assert( aff==SQLITE_AFF_TEXT );
       assert( MEM_Str==(MEM_Blob>>3) );
       pMem->flags |= (pMem->flags&MEM_Blob)>>3;
@@ -839,7 +845,9 @@ int sqlite3VdbeMemCast(Mem *pMem, u8 aff, u8 encoding){
       assert( pMem->flags & MEM_Str || pMem->db->mallocFailed );
       pMem->flags &= ~(MEM_Int|MEM_Real|MEM_IntReal|MEM_Blob|MEM_Zero);
       if( encoding!=SQLITE_UTF8 ) pMem->n &= ~1;
-      return sqlite3VdbeChangeEncoding(pMem, encoding);
+      rc = sqlite3VdbeChangeEncoding(pMem, encoding);
+      if( rc ) return rc;
+      sqlite3VdbeMemZeroTerminateIfAble(pMem);
     }
   }
   return SQLITE_OK;
@@ -1363,6 +1371,24 @@ const void *sqlite3ValueText(sqlite3_value* pVal, u8 enc){
   return valueToText(pVal, enc);
 }
 
+/* Return true if sqlit3_value object pVal is a string or blob value
+** that uses the destructor specified in the second argument.
+**
+** TODO:  Maybe someday promote this interface into a published API so
+** that third-party extensions can get access to it?
+*/
+int sqlite3ValueIsOfClass(const sqlite3_value *pVal, void(*xFree)(void*)){
+  if( ALWAYS(pVal!=0)
+   && ALWAYS((pVal->flags & (MEM_Str|MEM_Blob))!=0)
+   && (pVal->flags & MEM_Dyn)!=0
+   && pVal->xDel==xFree
+  ){
+    return 1;
+  }else{
+    return 0;
+  }
+}
+
 /*
 ** Create a new sqlite3_value object.
 */
@@ -1430,6 +1456,7 @@ static sqlite3_value *valueNew(sqlite3 *db, struct ValueNewStat4Ctx *p){
     }
   
     pRec->nField = p->iVal+1;
+    sqlite3VdbeMemSetNull(&pRec->aMem[p->iVal]);
     return &pRec->aMem[p->iVal];
   }
 #else
@@ -1483,9 +1510,12 @@ static int valueFromFunction(
   if( pList ) nVal = pList->nExpr;
   assert( !ExprHasProperty(p, EP_IntValue) );
   pFunc = sqlite3FindFunction(db, p->u.zToken, nVal, enc, 0);
+#ifdef SQLITE_ENABLE_UNKNOWN_SQL_FUNCTION
+  if( pFunc==0 ) return SQLITE_OK;
+#endif
   assert( pFunc );
-  if( (pFunc->funcFlags & (SQLITE_FUNC_CONSTANT|SQLITE_FUNC_SLOCHNG))==0 
-   || (pFunc->funcFlags & SQLITE_FUNC_NEEDCOLL)
+  if( (pFunc->funcFlags & (SQLITE_FUNC_CONSTANT|SQLITE_FUNC_SLOCHNG))==0
+   || (pFunc->funcFlags & (SQLITE_FUNC_NEEDCOLL|SQLITE_FUNC_RUNONLY))!=0
   ){
     return SQLITE_OK;
   }
@@ -1519,16 +1549,11 @@ static int valueFromFunction(
   }else{
     sqlite3ValueApplyAffinity(pVal, aff, SQLITE_UTF8);
     assert( rc==SQLITE_OK );
-    assert( enc==pVal->enc
-         || (pVal->flags & MEM_Str)==0
-         || db->mallocFailed  );
-#if 0  /* Not reachable except after a prior failure */
     rc = sqlite3VdbeChangeEncoding(pVal, enc);
-    if( rc==SQLITE_OK && sqlite3VdbeMemTooBig(pVal) ){
+    if( NEVER(rc==SQLITE_OK && sqlite3VdbeMemTooBig(pVal)) ){
       rc = SQLITE_TOOBIG;
       pCtx->pParse->nErr++;
     }
-#endif
   }
 
  value_from_function_out:
@@ -1592,6 +1617,13 @@ static int valueFromExpr(
     rc = valueFromExpr(db, pExpr->pLeft, enc, aff, ppVal, pCtx);
     testcase( rc!=SQLITE_OK );
     if( *ppVal ){
+#ifdef SQLITE_ENABLE_STAT4
+      rc = ExpandBlob(*ppVal);
+#else
+      /* zero-blobs only come from functions, not literal values.  And
+      ** functions are only processed under STAT4 */
+      assert( (ppVal[0][0].flags & MEM_Zero)==0 );
+#endif
       sqlite3VdbeMemCast(*ppVal, aff, enc);
       sqlite3ValueApplyAffinity(*ppVal, affinity, enc);
     }
@@ -1684,6 +1716,7 @@ static int valueFromExpr(
     if( pVal ){
       pVal->flags = MEM_Int;
       pVal->u.i = pExpr->u.zToken[4]==0;
+      sqlite3ValueApplyAffinity(pVal, affinity, enc);
     }
   }
 

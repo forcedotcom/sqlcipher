@@ -278,6 +278,19 @@
   The arguments are in the same form accepted by oo1.DB.exec(), with
   the exceptions noted below.
 
+  If the `countChanges` arguments property (added in version 3.43) is
+  truthy then the `result` property contained by the returned object
+  will have a `changeCount` property which holds the number of changes
+  made by the provided SQL. Because the SQL may contain an arbitrary
+  number of statements, the `changeCount` is calculated by calling
+  `sqlite3_total_changes()` before and after the SQL is evaluated. If
+  the value of `countChanges` is 64 then the `changeCount` property
+  will be returned as a 64-bit integer in the form of a BigInt (noting
+  that that will trigger an exception if used in a BigInt-incapable
+  build).  In the latter case, the number of changes is calculated by
+  calling `sqlite3_total_changes64()` before and after the SQL is
+  evaluated.
+
   A function-type args.callback property cannot cross
   the window/Worker boundary, so is not useful here. If
   args.callback is a string then it is assumed to be a
@@ -313,14 +326,13 @@
   options.columnNames may be populated by the call to db.exec().
 
 */
-self.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
+globalThis.sqlite3ApiBootstrap.initializers.push(function(sqlite3){
 sqlite3.initWorker1API = function(){
   'use strict';
   const toss = (...args)=>{throw new Error(args.join(' '))};
-  if('function' !== typeof importScripts){
+  if(!(globalThis.WorkerGlobalScope instanceof Function)){
     toss("initWorker1API() must be run from a Worker thread.");
   }
-  const self = this.self;
   const sqlite3 = this.sqlite3 || toss("Missing this.sqlite3 object.");
   const DB = sqlite3.oo1.DB;
 
@@ -382,10 +394,10 @@ sqlite3.initWorker1API = function(){
     */
     post: function(msg,xferList){
       if(xferList && xferList.length){
-        self.postMessage( msg, Array.from(xferList) );
+        globalThis.postMessage( msg, Array.from(xferList) );
         xferList.length = 0;
       }else{
-        self.postMessage(msg);
+        globalThis.postMessage(msg);
       }
     },
     /** Map of DB IDs to DBs. */
@@ -523,7 +535,13 @@ sqlite3.initWorker1API = function(){
         }
       }
       try {
+        const changeCount = !!rc.countChanges
+              ? db.changes(true,(64===rc.countChanges))
+              : undefined;
         db.exec(rc);
+        if(undefined !== changeCount){
+          rc.changeCount = db.changes(true,64===rc.countChanges) - changeCount;
+        }
         if(rc.callback instanceof Function){
           rc.callback = theCallback;
           /* Post a sentinel message to tell the client that the end
@@ -589,7 +607,7 @@ sqlite3.initWorker1API = function(){
     }
   }/*wMsgHandler*/;
 
-  self.onmessage = async function(ev){
+  globalThis.onmessage = async function(ev){
     ev = ev.data;
     let result, dbId = ev.dbId, evType = ev.type;
     const arrivalTime = performance.now();
@@ -637,6 +655,6 @@ sqlite3.initWorker1API = function(){
       result: result
     }, wState.xfer);
   };
-  self.postMessage({type:'sqlite3-api',result:'worker1-ready'});
-}.bind({self, sqlite3});
+  globalThis.postMessage({type:'sqlite3-api',result:'worker1-ready'});
+}.bind({sqlite3});
 });

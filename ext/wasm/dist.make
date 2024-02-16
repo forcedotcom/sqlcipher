@@ -38,7 +38,7 @@ dist-name := $(dist-name-prefix)-TEMP
 # date. Our general policy is that we want the smallest binaries for
 # dist zip files, so use the oz build unless there is a compelling
 # reason not to.
-dist.build ?= qoz
+dist.build ?= oz
 
 dist-dir.top := $(dist-name)
 dist-dir.jswasm := $(dist-dir.top)/$(notdir $(dir.dout))
@@ -70,7 +70,8 @@ STRIP_K1.js := $(sqlite3-worker1.js) $(sqlite3-worker1-promiser.js) \
   $(sqlite3-worker1-bundler-friendly.js) $(sqlite3-worker1-promiser-bundler-friendly.js)
 # STRIP_K2.js = list of JS files which need to be passed through
 # $(bin.stripcomments) with two -k flags.
-STRIP_K2.js := $(sqlite3.js) $(sqlite3.mjs) $(sqlite3-bundler-friendly.mjs)
+STRIP_K2.js := $(sqlite3.js) $(sqlite3.mjs) \
+  $(sqlite3-bundler-friendly.mjs) $(sqlite3-node.mjs)
 ########################################################################
 # dist: create the end-user deliverable archive.
 #

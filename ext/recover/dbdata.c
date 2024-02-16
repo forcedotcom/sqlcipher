@@ -73,13 +73,12 @@
 */
 
 #if !defined(SQLITEINT_H) 
-#include "sqlite3ext.h"
+#include "sqlite3.h"
 
 typedef unsigned char u8;
 typedef unsigned int u32;
 
 #endif
-SQLITE_EXTENSION_INIT1
 #include <string.h>
 #include <assert.h>
 
@@ -167,6 +166,7 @@ static int dbdataConnect(
   (void)argc;
   (void)argv;
   (void)pzErr;
+  sqlite3_vtab_config(db, SQLITE_VTAB_USES_ALL_SCHEMAS);
   if( rc==SQLITE_OK ){
     pTab = (DbdataTable*)sqlite3_malloc64(sizeof(DbdataTable));
     if( pTab==0 ){
@@ -663,8 +663,14 @@ static int dbdataNext(sqlite3_vtab_cursor *pCursor){
           if( pCsr->pHdrPtr>&pCsr->pRec[pCsr->nRec] ){
             bNextPage = 1;
           }else{
+            int szField = 0;
             pCsr->pHdrPtr += dbdataGetVarintU32(pCsr->pHdrPtr, &iType);
-            pCsr->pPtr += dbdataValueBytes(iType);
+            szField = dbdataValueBytes(iType);
+            if( (pCsr->nRec - (pCsr->pPtr - pCsr->pRec))<szField ){
+              pCsr->pPtr = &pCsr->pRec[pCsr->nRec];
+            }else{
+              pCsr->pPtr += szField;
+            }
           }
         }
       }
@@ -812,14 +818,16 @@ static int dbdataFilter(
   }
   if( rc==SQLITE_OK ){
     rc = sqlite3_bind_text(pCsr->pStmt, 1, zSchema, -1, SQLITE_TRANSIENT);
-  }else{
-    pTab->base.zErrMsg = sqlite3_mprintf("%s", sqlite3_errmsg(pTab->db));
   }
 
   /* Try to determine the encoding of the db by inspecting the header
   ** field on page 1. */
   if( rc==SQLITE_OK ){
     rc = dbdataGetEncoding(pCsr);
+  }
+
+  if( rc!=SQLITE_OK ){
+    pTab->base.zErrMsg = sqlite3_mprintf("%s", sqlite3_errmsg(pTab->db));
   }
 
   if( rc==SQLITE_OK ){
@@ -925,7 +933,8 @@ static int sqlite3DbdataRegister(sqlite3 *db){
     0,                            /* xSavepoint */
     0,                            /* xRelease */
     0,                            /* xRollbackTo */
-    0                             /* xShadowName */
+    0,                            /* xShadowName */
+    0                             /* xIntegrity */
   };
 
   int rc = sqlite3_create_module(db, "sqlite_dbdata", &dbdata_module, 0);
@@ -935,15 +944,11 @@ static int sqlite3DbdataRegister(sqlite3 *db){
   return rc;
 }
 
-#ifdef _WIN32
-__declspec(dllexport)
-#endif
 int sqlite3_dbdata_init(
   sqlite3 *db, 
   char **pzErrMsg, 
   const sqlite3_api_routines *pApi
 ){
-  SQLITE_EXTENSION_INIT2(pApi);
   (void)pzErrMsg;
   return sqlite3DbdataRegister(db);
 }

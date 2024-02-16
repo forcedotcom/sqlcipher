@@ -1106,7 +1106,7 @@ static void recoverAddTable(
       int iField = sqlite3_column_int(pStmt, 0);
       int iCol = sqlite3_column_int(pStmt, 1);
 
-      assert( iField<pNew->nCol && iCol<pNew->nCol );
+      assert( iCol<pNew->nCol );
       pNew->aCol[iCol].iField = iField;
 
       pNew->bIntkey = 0;
@@ -2103,7 +2103,7 @@ static int recoverIsValidPage(u8 *aTmp, const u8 *a, int n){
     if( iFree>(n-4) ) return 0;
     iNext = recoverGetU16(&a[iFree]);
     nByte = recoverGetU16(&a[iFree+2]);
-    if( iFree+nByte>n ) return 0;
+    if( iFree+nByte>n || nByte<4 ) return 0;
     if( iNext && iNext<iFree+nByte ) return 0;
     memset(&aUsed[iFree], 0xFF, nByte);
     iFree = iNext;

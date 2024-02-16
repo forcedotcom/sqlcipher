@@ -59,8 +59,7 @@ static int blobSeekToRow(Incrblob *p, sqlite3_int64 iRow, char **pzErr){
   /* Set the value of register r[1] in the SQL statement to integer iRow. 
   ** This is done directly as a performance optimization
   */
-  v->aMem[1].flags = MEM_Int;
-  v->aMem[1].u.i = iRow;
+  sqlite3VdbeMemSetInt64(&v->aMem[1], iRow);
 
   /* If the statement has been run before (and is paused at the OP_ResultRow)
   ** then back it up to the point where it does the OP_NotExists.  This could
@@ -143,7 +142,7 @@ int sqlite3_blob_open(
 #endif
   *ppBlob = 0;
 #ifdef SQLITE_ENABLE_API_ARMOR
-  if( !sqlite3SafetyCheckOk(db) || zTable==0 ){
+  if( !sqlite3SafetyCheckOk(db) || zTable==0 || zColumn==0 ){
     return SQLITE_MISUSE_BKPT;
   }
 #endif
@@ -342,7 +341,7 @@ blob_open_out:
     if( pBlob && pBlob->pStmt ) sqlite3VdbeFinalize((Vdbe *)pBlob->pStmt);
     sqlite3DbFree(db, pBlob);
   }
-  sqlite3ErrorWithMsg(db, rc, (zErr ? "%s" : 0), zErr);
+  sqlite3ErrorWithMsg(db, rc, (zErr ? "%s" : (char*)0), zErr);
   sqlite3DbFree(db, zErr);
   sqlite3ParseObjectReset(&sParse);
   rc = sqlite3ApiExit(db, rc);
@@ -501,7 +500,7 @@ int sqlite3_blob_reopen(sqlite3_blob *pBlob, sqlite3_int64 iRow){
     ((Vdbe*)p->pStmt)->rc = SQLITE_OK;
     rc = blobSeekToRow(p, iRow, &zErr);
     if( rc!=SQLITE_OK ){
-      sqlite3ErrorWithMsg(db, rc, (zErr ? "%s" : 0), zErr);
+      sqlite3ErrorWithMsg(db, rc, (zErr ? "%s" : (char*)0), zErr);
       sqlite3DbFree(db, zErr);
     }
     assert( rc!=SQLITE_SCHEMA );

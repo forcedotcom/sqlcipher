@@ -48,6 +48,9 @@ do_execsql_test json102-180 {
 do_execsql_test json102-190 {
   SELECT json_array_length('[1,2,3,4]');
 } {{4}}
+do_execsql_test json102-191 {
+  SELECT json_array_length( json_remove('[1,2,3,4]','$[2]') );
+} {{3}}
 do_execsql_test json102-200 {
   SELECT json_array_length('[1,2,3,4]', '$');
 } {{4}}
@@ -301,18 +304,27 @@ for {set i 0} {$i<100} {incr i} {
 # allowing them.  The following tests verify that the problem is now
 # fixed.
 #
-do_execsql_test json102-1401 { SELECT json_valid('{"x":01}') } 0
-do_execsql_test json102-1402 { SELECT json_valid('{"x":-01}') } 0
-do_execsql_test json102-1403 { SELECT json_valid('{"x":0}') } 1
-do_execsql_test json102-1404 { SELECT json_valid('{"x":-0}') } 1
-do_execsql_test json102-1405 { SELECT json_valid('{"x":0.1}') } 1
-do_execsql_test json102-1406 { SELECT json_valid('{"x":-0.1}') } 1
-do_execsql_test json102-1407 { SELECT json_valid('{"x":0.0000}') } 1
-do_execsql_test json102-1408 { SELECT json_valid('{"x":-0.0000}') } 1
-do_execsql_test json102-1409 { SELECT json_valid('{"x":01.5}') } 0
-do_execsql_test json102-1410 { SELECT json_valid('{"x":-01.5}') } 0
-do_execsql_test json102-1411 { SELECT json_valid('{"x":00}') } 0
-do_execsql_test json102-1412 { SELECT json_valid('{"x":-00}') } 0
+foreach {id j x0 x5} {
+  1401 {'{"x":01}'} 0 0
+  1402 {'{"x":-01}'} 0 0
+  1403 {'{"x":0}'} 1 1
+  1404 {'{"x":-0}'} 1 1
+  1405 {'{"x":0.1}'} 1 1
+  1406 {'{"x":-0.1}'} 1 1
+  1407 {'{"x":0.0000}'} 1 1
+  1408 {'{"x":-0.0000}'} 1 1
+  1409 {'{"x":01.5}'} 0 0
+  1410 {'{"x":-01.5}'} 0 0
+  1411 {'{"x":00}'} 0 0
+  1412 {'{"x":-00}'} 0 0
+  1413 {'{"x":+0}'} 0 1
+  1414 {'{"x":+5}'} 0 1
+  1415 {'{"x":+5.5}'} 0 1
+} {
+  do_execsql_test json102-$id "
+     SELECT json_valid($j), NOT json_error_position($j);
+  " [list $x0 $x5]
+}
 
 #------------------------------------------------------------------------
 # 2017-04-10 ticket 6c9b5514077fed34551f98e64c09a10dc2fc8e16
@@ -387,5 +399,23 @@ do_execsql_test json102-1610 {
   5 {{"b":9}} json {{"b":9}} text    {{"b":9}} json       \
   6 {}        null {}        null    {}        null
 ]
+
+reset_db
+do_execsql_test json102-1700 {
+  CREATE TABLE t1(a1 DATE, a2 INTEGER PRIMARY KEY, a3 INTEGER, memo TEXT);
+  CREATE INDEX t1x1 ON t1(a3, a1, memo->>'y');
+  INSERT INTO t1(a2,a1,a3,memo) VALUES (876, '2023-08-03', 5, '{"x":77,"y":4}');
+}
+do_execsql_test json102-1710 {
+  UPDATE t1 SET memo = JSON_REMOVE(memo, '$.y');
+  PRAGMA integrity_check;
+  SELECT * FROM t1;
+} {ok 2023-08-03 876 5 {{"x":77}}}
+do_execsql_test json102-1720 {
+  UPDATE t1 SET memo = JSON_SET(memo, '$.y', 6)
+    WHERE a2 IN (876) AND JSON_TYPE(memo, '$.y') IS NULL;
+  PRAGMA integrity_check;
+  SELECT * FROM t1;
+} {ok 2023-08-03 876 5 {{"x":77,"y":6}}}
 
 finish_test

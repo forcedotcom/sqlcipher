@@ -1001,12 +1001,14 @@ static int recoverSqlCb(void *pCtx, const char *zSql){
 */
 static int recoverDatabase(sqlite3 *db){
   int rc;                                 /* Return code from this routine */
+  const char *zRecoveryDb = "";           /* Name of "recovery" database */
   const char *zLAF = "lost_and_found";    /* Name of "lost_and_found" table */
   int bFreelist = 1;                      /* True to scan the freelist */
   int bRowids = 1;                        /* True to restore ROWID values */
-  sqlite3_recover *p;                     /* The recovery object */
+  sqlite3_recover *p = 0;                 /* The recovery object */
 
   p = sqlite3_recover_init_sql(db, "main", recoverSqlCb, 0);
+  sqlite3_recover_config(p, 789, (void*)zRecoveryDb);
   sqlite3_recover_config(p, SQLITE_RECOVER_LOST_AND_FOUND, (void*)zLAF);
   sqlite3_recover_config(p, SQLITE_RECOVER_ROWIDS, (void*)&bRowids);
   sqlite3_recover_config(p, SQLITE_RECOVER_FREELIST_CORRUPT,(void*)&bFreelist);
@@ -1038,7 +1040,7 @@ static int runDbSql(sqlite3 *db, const char *zSql, unsigned int *pBtsFlags){
     printf("RUNNING-SQL: [%s]\n", zSql);
     fflush(stdout);
   }
-  (*pBtsFlags) &= ~BTS_BADPRAGMA;
+  (*pBtsFlags) &= BTS_BADPRAGMA;
   rc = sqlite3_prepare_v2(db, zSql, -1, &pStmt, 0);
   if( rc==SQLITE_OK ){
     int nRow = 0;
@@ -1128,6 +1130,44 @@ static int runDbSql(sqlite3 *db, const char *zSql, unsigned int *pBtsFlags){
   return sqlite3_finalize(pStmt);
 }
 
+/* Mappings into dbconfig settings for bits taken from bytes 72..75 of
+** the input database.
+**
+** This should be the same as in dbsqlfuzz.c.  Make sure those codes stay
+** in sync.
+*/
+static const struct {
+  unsigned int mask;
+  int iSetting;
+  char *zName;
+} aDbConfigSettings[] = {
+  {  0x0001, SQLITE_DBCONFIG_ENABLE_FKEY,        "enable_fkey"        },
+  {  0x0002, SQLITE_DBCONFIG_ENABLE_TRIGGER,     "enable_trigger"     },
+  {  0x0004, SQLITE_DBCONFIG_ENABLE_VIEW,        "enable_view"        },
+  {  0x0008, SQLITE_DBCONFIG_ENABLE_QPSG,        "enable_qpsg"        },
+  {  0x0010, SQLITE_DBCONFIG_TRIGGER_EQP,        "trigger_eqp"        },
+  {  0x0020, SQLITE_DBCONFIG_DEFENSIVE,          "defensive"          },
+  {  0x0040, SQLITE_DBCONFIG_WRITABLE_SCHEMA,    "writable_schema"    },
+  {  0x0080, SQLITE_DBCONFIG_LEGACY_ALTER_TABLE, "legacy_alter_table" },
+  {  0x0100, SQLITE_DBCONFIG_STMT_SCANSTATUS,    "stmt_scanstatus"    },
+  {  0x0200, SQLITE_DBCONFIG_REVERSE_SCANORDER,  "reverse_scanorder"  },
+#ifdef SQLITE_DBCONFIG_STRICT_AGGREGATE
+  {  0x0400, SQLITE_DBCONFIG_STRICT_AGGREGATE,   "strict_aggregate"   },
+#endif
+  {  0x0800, SQLITE_DBCONFIG_DQS_DML,            "dqs_dml"            },
+  {  0x1000, SQLITE_DBCONFIG_DQS_DDL,            "dqs_ddl"            },
+  {  0x2000, SQLITE_DBCONFIG_TRUSTED_SCHEMA,     "trusted_schema"     },
+};
+
+/* Toggle a dbconfig setting
+*/
+static void toggleDbConfig(sqlite3 *db, int iSetting){
+  int v = 0;
+  sqlite3_db_config(db, iSetting, -1, &v);
+  v = !v;
+  sqlite3_db_config(db, iSetting, v, 0);
+}
+
 /* Invoke this routine to run a single test case */
 int runCombinedDbSqlInput(
   const uint8_t *aData,      /* Combined DB+SQL content */
@@ -1146,6 +1186,9 @@ int runCombinedDbSqlInput(
   int nSql;                  /* Bytes of SQL text */
   FuzzCtx cx;                /* Fuzzing context */
   unsigned int btsFlags = 0; /* Parsing flags */
+  unsigned int dbFlags = 0;  /* Flag values from db offset 72..75 */
+  unsigned int dbOpt = 0;    /* Flag values from db offset 76..79 */
+
 
   if( nByte<10 ) return 0;
   if( sqlite3_initialize() ) return 0;
@@ -1161,6 +1204,14 @@ int runCombinedDbSqlInput(
   memset(&cx, 0, sizeof(cx));
   iSql = decodeDatabase((unsigned char*)aData, (int)nByte, &aDb, &nDb);
   if( iSql<0 ) return 0;
+  if( nDb>=75 ){
+    dbFlags = ((unsigned int)aDb[72]<<24) + ((unsigned int)aDb[73]<<16) +
+              ((unsigned int)aDb[74]<<8) + (unsigned int)aDb[75];
+  }
+  if( nDb>=79 ){
+    dbOpt = ((unsigned int)aDb[76]<<24) + ((unsigned int)aDb[77]<<16) +
+            ((unsigned int)aDb[78]<<8) + (unsigned int)aDb[79];
+  }
   nSql = (int)(nByte - iSql);
   if( bScript ){
     char zName[100];
@@ -1180,6 +1231,12 @@ int runCombinedDbSqlInput(
   if( rc ){
     sqlite3_free(aDb);
     return 1;
+  }
+  sqlite3_test_control(SQLITE_TESTCTRL_OPTIMIZATIONS, cx.db, dbOpt);
+  for(i=0; i<sizeof(aDbConfigSettings)/sizeof(aDbConfigSettings[0]); i++){
+    if( dbFlags & aDbConfigSettings[i].mask ){
+      toggleDbConfig(cx.db, aDbConfigSettings[i].iSetting);
+    }
   }
   if( bVdbeDebug ){
     sqlite3_exec(cx.db, "PRAGMA vdbe_debug=ON", 0, 0, 0);
@@ -1768,6 +1825,8 @@ static void showHelp(void){
 "  --timeout N          Maximum time for any one test in N millseconds\n"
 "  -v|--verbose         Increased output.  Repeat for more output.\n"
 "  --vdbe-debug         Activate VDBE debugging.\n"
+"  --wait N             Wait N seconds before continuing - useful for\n"
+"                          attaching an MSVC debugging.\n"
   );
 }
 
@@ -1974,11 +2033,29 @@ int main(int argc, char **argv){
       if( strcmp(z,"version")==0 ){
         int ii;
         const char *zz;
-        printf("SQLite %s %s\n", sqlite3_libversion(), sqlite3_sourceid());
+        printf("SQLite %s %s (%d-bit)\n",
+            sqlite3_libversion(), sqlite3_sourceid(),
+            8*(int)sizeof(char*));
         for(ii=0; (zz = sqlite3_compileoption_get(ii))!=0; ii++){
           printf("%s\n", zz);
         }
         return 0;
+      }else
+      if( strcmp(z,"wait")==0 ){
+        int iDelay;
+        if( i>=argc-1 ) fatalError("missing arguments on %s", argv[i]);
+        iDelay = integerValue(argv[++i]);
+        printf("Waiting %d seconds:", iDelay);
+        fflush(stdout);
+        while( 1 /*exit-by-break*/ ){
+          sqlite3_sleep(1000);
+          iDelay--;
+          if( iDelay<=0 ) break;
+          printf(" %d", iDelay);
+          fflush(stdout);
+        }
+        printf("\n");
+        fflush(stdout);
       }else
       if( strcmp(z,"is-dbsql")==0 ){
         i++;
@@ -2463,9 +2540,10 @@ int main(int argc, char **argv){
       printf("fuzzcheck: %u query invariants checked\n", g.nInvariant);
     }
     printf("fuzzcheck: 0 errors out of %d tests in %d.%03d seconds\n"
-           "SQLite %s %s\n",
+           "SQLite %s %s (%d-bit)\n",
            nTest, (int)(iElapse/1000), (int)(iElapse%1000),
-           sqlite3_libversion(), sqlite3_sourceid());
+           sqlite3_libversion(), sqlite3_sourceid(),
+           8*(int)sizeof(char*));
   }
   free(azSrcDb);
   free(pHeap);

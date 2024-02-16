@@ -62,7 +62,7 @@
       return this.queue.shift();
     }
   };
-  
+
   const testCount = ()=>{
     logHtml("","Total test count:",T.counter+". Total time =",(performance.now() - startTime),"ms");
   };
@@ -74,7 +74,7 @@
             (ev.workerRespondTime - ev.workerReceivedTime),"ms.",
             "Round-trip event time =",
             (performance.now() - ev.departureTime),"ms.",
-            (evd.errorClass ? ev.message : "")//, JSON.stringify(evd)
+            (evd.errorClass ? evd.message : "")//, JSON.stringify(evd)
            );
   };
 
@@ -209,8 +209,8 @@
         // ^^^ arbitrary query with no result columns
         "select a, b from t order by a desc;",
         "select a from t;"
-        // multi-statement exec only honors results from the first
-        // statement with result columns (regardless of whether)
+        // exec() only honors SELECT results from the first
+        // statement with result columns (regardless of whether
         // it has any rows).
       ],
       rowMode: 1,

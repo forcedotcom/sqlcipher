@@ -858,6 +858,7 @@ static int isSetNullAction(Parse *pParse, FKey *pFKey){
     if( (p==pFKey->apTrigger[0] && pFKey->aAction[0]==OE_SetNull)
      || (p==pFKey->apTrigger[1] && pFKey->aAction[1]==OE_SetNull)
     ){
+      assert( (pTop->db->flags & SQLITE_FkNoAction)==0 );
       return 1;
     }
   }
@@ -1052,6 +1053,8 @@ void sqlite3FkCheck(
       }
       if( regOld!=0 ){
         int eAction = pFKey->aAction[aChange!=0];
+        if( (db->flags & SQLITE_FkNoAction) ) eAction = OE_None;
+
         fkScanChildren(pParse, pSrc, pTab, pIdx, pFKey, aiCol, regOld, 1);
         /* If this is a deferred FK constraint, or a CASCADE or SET NULL
         ** action applies, then any foreign key violations caused by
@@ -1167,7 +1170,11 @@ int sqlite3FkRequired(
       /* Check if any parent key columns are being modified. */
       for(p=sqlite3FkReferences(pTab); p; p=p->pNextTo){
         if( fkParentIsModified(pTab, p, aChange, chngRowid) ){
-          if( p->aAction[1]!=OE_None ) return 2;
+          if( (pParse->db->flags & SQLITE_FkNoAction)==0 
+           && p->aAction[1]!=OE_None 
+          ){
+            return 2;
+          }
           bHaveFK = 1;
         }
       }
@@ -1217,6 +1224,7 @@ static Trigger *fkActionTrigger(
   int iAction = (pChanges!=0);    /* 1 for UPDATE, 0 for DELETE */
 
   action = pFKey->aAction[iAction];
+  if( (db->flags & SQLITE_FkNoAction) ) action = OE_None;
   if( action==OE_Restrict && (db->flags & SQLITE_DeferFKs) ){
     return 0;
   }
@@ -1317,22 +1325,22 @@ static Trigger *fkActionTrigger(
 
     if( action==OE_Restrict ){
       int iDb = sqlite3SchemaToIndex(db, pTab->pSchema);
-      Token tFrom;
-      Token tDb;
+      SrcList *pSrc;
       Expr *pRaise; 
-
-      tFrom.z = zFrom;
-      tFrom.n = nFrom;
-      tDb.z = db->aDb[iDb].zDbSName;
-      tDb.n = sqlite3Strlen30(tDb.z);
 
       pRaise = sqlite3Expr(db, TK_RAISE, "FOREIGN KEY constraint failed");
       if( pRaise ){
         pRaise->affExpr = OE_Abort;
       }
+      pSrc = sqlite3SrcListAppend(pParse, 0, 0, 0);
+      if( pSrc ){
+        assert( pSrc->nSrc==1 );
+        pSrc->a[0].zName = sqlite3DbStrDup(db, zFrom);
+        pSrc->a[0].zDatabase = sqlite3DbStrDup(db, db->aDb[iDb].zDbSName);
+      }
       pSelect = sqlite3SelectNew(pParse, 
           sqlite3ExprListAppend(pParse, 0, pRaise),
-          sqlite3SrcListAppend(pParse, 0, &tDb, &tFrom),
+          pSrc,
           pWhere,
           0, 0, 0, 0, 0
       );
@@ -1448,9 +1456,8 @@ void sqlite3FkDelete(sqlite3 *db, Table *pTab){
       if( pFKey->pPrevTo ){
         pFKey->pPrevTo->pNextTo = pFKey->pNextTo;
       }else{
-        void *p = (void *)pFKey->pNextTo;
-        const char *z = (p ? pFKey->pNextTo->zTo : pFKey->zTo);
-        sqlite3HashInsert(&pTab->pSchema->fkeyHash, z, p);
+        const char *z = (pFKey->pNextTo ? pFKey->pNextTo->zTo : pFKey->zTo);
+        sqlite3HashInsert(&pTab->pSchema->fkeyHash, z, pFKey->pNextTo);
       }
       if( pFKey->pNextTo ){
         pFKey->pNextTo->pPrevTo = pFKey->pPrevTo;
