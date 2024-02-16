@@ -46,7 +46,7 @@ do_test verify-pragma-cipher-version {
     execsql {
         PRAGMA cipher_version;
     }
-} {{4.5.5 community}}
+} {{4.5.6 community}}
 db close
 file delete -force test.db
 
@@ -199,6 +199,35 @@ do_test verify-pragma-cipher-page-size-changed {
         PRAGMA cipher_page_size;
     }
 } {ok 8192}
+db close
+file delete -force test.db
+
+# verify that a call to pragma page_size
+# will report change via both page_size and cipher_page_size
+# when there is an attached codec
+do_test verify-pragma-page-size-encrypted {
+    sqlite_orig db test.db
+    execsql {
+        PRAGMA key = 'test';
+        PRAGMA page_size = 8192;
+        PRAGMA page_size;
+        PRAGMA cipher_page_size;
+    }
+} {ok 8192 8192}
+db close
+file delete -force test.db
+
+# verify that a call to pragma page_size
+# will not report a change to cipher_page_size for an
+# unencrypted database
+do_test verify-pragma-page-size-plaintext {
+    sqlite_orig db test.db
+    execsql {
+        PRAGMA page_size = 8192;
+        PRAGMA page_size;
+        PRAGMA cipher_page_size;
+    }
+} {8192}
 db close
 file delete -force test.db
 
