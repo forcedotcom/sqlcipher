@@ -1,6 +1,13 @@
 # SQLCipher Change Log
 All notable changes to this project will be documented in this file.
 
+## [4.5.7] - (April 2024 - [4.5.7 changes])
+- Updates baseline to upstream SQLite 3.45.3
+- Adds "device" logging and profile target using os_log for Apple (and logcat on Android)
+- Fixes issues compiling with SQLITE_OMIT_LOG
+- fixes malformed man page caused by old merge conflict
+- Updates podspec for current Xcode versions, improved Swift support, and Privacy Manifest
+
 ## [4.5.6] - (January 2024 - [4.5.6 changes])
 - Updates baseline to upstream SQLite 3.44.2
 - Improve PRAGMA cipher_integrity check to report expected page size if invalid
@@ -232,6 +239,8 @@ All notable changes to this project will be documented in this file.
 ### Security
 - Change KDF iteration length from 4,000 to 64,000
 
+[4.5.7]: https://github.com/sqlcipher/sqlcipher/tree/v4.5.7
+[4.5.7 changes]: https://github.com/sqlcipher/sqlcipher/compare/v4.5.6...v4.5.7
 [4.5.6]: https://github.com/sqlcipher/sqlcipher/tree/v4.5.6
 [4.5.6 changes]: https://github.com/sqlcipher/sqlcipher/compare/v4.5.5...v4.5.6
 [4.5.5]: https://github.com/sqlcipher/sqlcipher/tree/v4.5.5
