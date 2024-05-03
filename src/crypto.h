@@ -40,8 +40,13 @@
 #include "pager.h"
 #include "vdbeInt.h"
 
-#ifdef __ANDROID__
+#if !defined(SQLCIPHER_OMIT_LOG_DEVICE)
+#if defined(__ANDROID__)
 #include <android/log.h>
+#elif defined(__APPLE__)
+#include <TargetConditionals.h>
+#include <os/log.h>
+#endif
 #endif
 
 #include <time.h>
@@ -84,7 +89,7 @@ void sqlite3pager_reset(Pager *pPager);
 #define CIPHER_STR(s) #s
 
 #ifndef CIPHER_VERSION_NUMBER
-#define CIPHER_VERSION_NUMBER 4.5.6
+#define CIPHER_VERSION_NUMBER 4.5.7
 #endif
 
 #ifndef CIPHER_VERSION_BUILD
@@ -326,7 +331,6 @@ int sqlcipher_codec_ctx_integrity_check(codec_ctx *, Parse *, char *);
 
 int sqlcipher_set_log(const char *destination);
 void sqlcipher_set_log_level(unsigned int level);
-void sqlcipher_log(unsigned int tag, const char *message, ...);
 
 #define SQLCIPHER_LOG_NONE          0x00
 #define SQLCIPHER_LOG_ERROR         0x01
@@ -335,6 +339,12 @@ void sqlcipher_log(unsigned int tag, const char *message, ...);
 #define SQLCIPHER_LOG_DEBUG         0x08
 #define SQLCIPHER_LOG_TRACE         0x10
 #define SQLCIPHER_LOG_ALL           0xffffffff
+
+#ifdef SQLCIPHER_OMIT_LOG
+#define sqlcipher_log(tag, message, ...)
+#else
+void sqlcipher_log(unsigned int tag, const char *message, ...);
+#endif
 
 void sqlcipher_vdbe_return_string(Parse*, const char*, const char*, int);
 
