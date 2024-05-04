@@ -253,6 +253,9 @@ SQLITE_WSD struct Sqlite3Config sqlite3Config = {
    0,                         /* bSmallMalloc */
    1,                         /* bExtraSchemaChecks */
    sizeof(LONGDOUBLE_TYPE)>8, /* bUseLongDouble */
+#ifdef SQLITE_DEBUG
+   0,                         /* bJsonSelfcheck */
+#endif
    0x7ffffffe,                /* mxStrlen */
    0,                         /* neverCorrupt */
    SQLITE_DEFAULT_LOOKASIDE,  /* szLookaside, nLookaside */
@@ -294,6 +297,9 @@ SQLITE_WSD struct Sqlite3Config sqlite3Config = {
 #endif
 #ifndef SQLITE_UNTESTABLE
    0,                         /* xTestCallback */
+#endif
+#ifdef SQLITE_ALLOW_ROWID_IN_VIEW
+   0,                         /* mNoVisibleRowid.  0 == allow rowid-in-view */
 #endif
    0,                         /* bLocaltimeFault */
    0,                         /* xAltLocaltime */

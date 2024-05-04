@@ -68,6 +68,19 @@ int sqlite3IsNaN(double x){
 }
 #endif /* SQLITE_OMIT_FLOATING_POINT */
 
+#ifndef SQLITE_OMIT_FLOATING_POINT
+/*
+** Return true if the floating point value is NaN or +Inf or -Inf.
+*/
+int sqlite3IsOverflow(double x){
+  int rc;   /* The value return */
+  u64 y;
+  memcpy(&y,&x,sizeof(y));
+  rc = IsOvfl(y);
+  return rc;
+}
+#endif /* SQLITE_OMIT_FLOATING_POINT */
+
 /*
 ** Compute a string length that is limited to what can be stored in
 ** lower 30 bits of a 32-bit signed integer.
@@ -141,7 +154,7 @@ void sqlite3ErrorClear(sqlite3 *db){
 */
 void sqlite3SystemError(sqlite3 *db, int rc){
   if( rc==SQLITE_IOERR_NOMEM ) return;
-#ifdef SQLITE_USE_SEH
+#if defined(SQLITE_USE_SEH) && !defined(SQLITE_OMIT_WAL)
   if( rc==SQLITE_IOERR_IN_PAGE ){
     int ii;
     int iErr;
@@ -627,6 +640,9 @@ do_atof_calc:
     u64 s2;
     rr[0] = (double)s;
     s2 = (u64)rr[0];
+#if defined(_MSC_VER) && _MSC_VER<1700
+    if( s2==0x8000000000000000LL ){ s2 = 2*(u64)(0.5*rr[0]); }
+#endif
     rr[1] = s>=s2 ? (double)(s - s2) : -(double)(s2 - s);
     if( e>0 ){
       while( e>=100  ){
@@ -1069,7 +1085,7 @@ void sqlite3FpDecode(FpDecode *p, double r, int iRound, int mxRound){
   assert( p->n>0 );
   assert( p->n<sizeof(p->zBuf) );
   p->iDP = p->n + exp;
-  if( iRound<0 ){
+  if( iRound<=0 ){
     iRound = p->iDP - iRound;
     if( iRound==0 && p->zBuf[i+1]>='5' ){
       iRound = 1;
