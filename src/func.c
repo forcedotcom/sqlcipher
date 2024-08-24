@@ -2206,6 +2206,8 @@ static void groupConcatValue(sqlite3_context *context){
       sqlite3_result_error_toobig(context);
     }else if( pAccum->accError==SQLITE_NOMEM ){
       sqlite3_result_error_nomem(context);
+    }else if( pGCC->nAccum>0 && pAccum->nChar==0 ){
+      sqlite3_result_text(context, "", 1, SQLITE_STATIC);
     }else{   
       const char *zText = sqlite3_str_value(pAccum);
       sqlite3_result_text(context, zText, pAccum->nChar, SQLITE_TRANSIENT);
@@ -2233,9 +2235,6 @@ void sqlite3RegisterPerConnectionBuiltinFunctions(sqlite3 *db){
     extern void sqlcipher_exportFunc(sqlite3_context *, int, sqlite3_value **);
     sqlite3CreateFunc(db, "sqlcipher_export", -1, SQLITE_TEXT, 0, sqlcipher_exportFunc, 0, 0, 0, 0, 0);
   }
-#ifdef SQLCIPHER_EXT
-#include "sqlcipher_funcs_init.h"
-#endif
 #endif
 /* END SQLCIPHER */
 }
