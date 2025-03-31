@@ -3,6 +3,7 @@ xcodebuild BITCODE_GENERATION_MODE=bitcode OTHER_CFLAGS="\$(inherited) -fembed-b
 if [ -f "build/UninstalledProducts/iphoneos/libsqlcipher.a" ]; then
 	mv build/UninstalledProducts/iphoneos/libsqlcipher.a libsqlcipher-iphoneos.a
 fi
+
 xcodebuild BITCODE_GENERATION_MODE=bitcode OTHER_CFLAGS="\$(inherited) -fembed-bitcode" ONLY_ACTIVE_ARCH=NO -destination "generic/platform=iOS Simulator" -configuration Release -sdk iphonesimulator -project sqlcipher.xcodeproj -target sqlcipher clean install
 if [ -f "./build/UninstalledProducts/iphonesimulator/libsqlcipher.a" ]; then
 	mv ./build/UninstalledProducts/iphonesimulator/libsqlcipher.a libsqlcipher-iphonesimulator.a
@@ -13,7 +14,19 @@ if [ -f "./build-catalyst/Build/Products/Release-maccatalyst/libsqlcipher.a" ]; 
     mv build-catalyst/Build/Products/Release-maccatalyst/libsqlcipher.a libsqlcipher-catalyst.a
 fi
 
+xcodebuild BITCODE_GENERATION_MODE=bitcode OTHER_CFLAGS="\$(inherited) -fembed-bitcode" ONLY_ACTIVE_ARCH=NO -destination "generic/platform=visionOS Simulator" -configuration Release -sdk xrsimulator -project sqlcipher.xcodeproj -target sqlcipher clean install
+if [ -f "build/UninstalledProducts/xrsimulator/libsqlcipher.a" ]; then
+    mv build/UninstalledProducts/xrsimulator/libsqlcipher.a libsqlcipher-xrsimulator.a
+fi
+
+xcodebuild BITCODE_GENERATION_MODE=bitcode OTHER_CFLAGS="\$(inherited) -fembed-bitcode" ONLY_ACTIVE_ARCH=NO -destination "generic/platform=visionOS Device" -configuration Release -sdk xros -project sqlcipher.xcodeproj -target sqlcipher clean install
+if [ -f "build/UninstalledProducts/xros/libsqlcipher.a" ]; then
+    mv build/UninstalledProducts/xros/libsqlcipher.a libsqlcipher-xros.a
+fi
+
 xcodebuild -create-xcframework -output SQLCipher.xcframework \
     -library libsqlcipher-iphoneos.a \
     -library libsqlcipher-iphonesimulator.a \
-    -library libsqlcipher-catalyst.a
+    -library libsqlcipher-catalyst.a \
+    -library libsqlcipher-xrsimulator.a \
+    -library libsqlcipher-xros.a
