@@ -52,15 +52,28 @@
 #define SQLCIPHER_PBKDF2_HMAC_SHA512 2
 #define SQLCIPHER_PBKDF2_HMAC_SHA512_LABEL "PBKDF2_HMAC_SHA512"
 
-typedef struct {
-  int (*activate)(void *ctx);
-  int (*deactivate)(void *ctx);
+typedef struct sqlcipher_provider sqlcipher_provider;
+struct sqlcipher_provider {
+  int (*init)(void);
+  void (*shutdown)(void);
   const char* (*get_provider_name)(void *ctx);
-  int (*add_random)(void *ctx, void *buffer, int length);
+  int (*add_random)(void *ctx, const void *buffer, int length);
   int (*random)(void *ctx, void *buffer, int length);
-  int (*hmac)(void *ctx, int algorithm, unsigned char *hmac_key, int key_sz, unsigned char *in, int in_sz, unsigned char *in2, int in2_sz, unsigned char *out);
-  int (*kdf)(void *ctx, int algorithm, const unsigned char *pass, int pass_sz, unsigned char* salt, int salt_sz, int workfactor, int key_sz, unsigned char *key);
-  int (*cipher)(void *ctx, int mode, unsigned char *key, int key_sz, unsigned char *iv, unsigned char *in, int in_sz, unsigned char *out);
+  int (*hmac)(void *ctx, int algorithm,
+              const unsigned char *hmac_key, int key_sz,
+              const unsigned char *in, int in_sz,
+              const unsigned char *in2, int in2_sz,
+              unsigned char *out);
+  int (*kdf)(void *ctx, int algorithm,
+              const unsigned char *pass, int pass_sz,
+              const unsigned char* salt, int salt_sz,
+              int workfactor,
+              int key_sz, unsigned char *key);
+  int (*cipher)(void *ctx, int mode,
+              const unsigned char *key, int key_sz,
+              const unsigned char *iv,
+              const unsigned char *in, int in_sz,
+              unsigned char *out);
   const char* (*get_cipher)(void *ctx);
   int (*get_key_sz)(void *ctx);
   int (*get_iv_sz)(void *ctx);
@@ -70,23 +83,25 @@ typedef struct {
   int (*ctx_free)(void **ctx);
   int (*fips_status)(void *ctx);
   const char* (*get_provider_version)(void *ctx);
-} sqlcipher_provider;
+  sqlcipher_provider *next;
+};
 
 /* public interfaces called externally */
+int sqlcipher_extra_init(const char*);
+void sqlcipher_extra_shutdown(void);
 void sqlcipher_init_memmethods(void);
 int sqlcipher_codec_pragma(sqlite3*, int, Parse*, const char *, const char*);
 int sqlcipherCodecAttach(sqlite3*, int, const void *, int);
 void sqlcipherCodecGetKey(sqlite3*, int, void**, int*);
-void sqlcipher_exportFunc(sqlite3_context *, int, sqlite3_value **);
 int sqlcipher_find_db_index(sqlite3 *, const char *);
 
 /* utility functions */
-void* sqlcipher_malloc(sqlite_uint64);
 void* sqlcipher_memset(void *, unsigned char, sqlite_uint64);
 int sqlcipher_ismemset(const void *, unsigned char, sqlite_uint64);
 int sqlcipher_memcmp(const void *, const void *, int);
+void* sqlcipher_malloc(sqlite_uint64);
 void sqlcipher_free(void *, sqlite_uint64);
-char* sqlcipher_version();
+char* sqlcipher_version(void);
 
 /* provider interfaces */
 int sqlcipher_register_provider(sqlcipher_provider *);
@@ -98,7 +113,8 @@ sqlcipher_provider* sqlcipher_get_provider(void);
 #define SQLCIPHER_MUTEX_RESERVED1         3
 #define SQLCIPHER_MUTEX_RESERVED2         4
 #define SQLCIPHER_MUTEX_RESERVED3         5
-#define SQLCIPHER_MUTEX_COUNT             6
+#define SQLCIPHER_MUTEX_MEM               6
+#define SQLCIPHER_MUTEX_COUNT             7
 
 sqlite3_mutex* sqlcipher_mutex(int);
 
