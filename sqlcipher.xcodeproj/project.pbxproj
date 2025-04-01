@@ -6,20 +6,6 @@
 	objectVersion = 54;
 	objects = {
 
-/* Begin PBXAggregateTarget section */
-		9069D08B0FCE185A0042E34C /* amalgamation */ = {
-			isa = PBXAggregateTarget;
-			buildConfigurationList = 9069D0900FCE18970042E34C /* Build configuration list for PBXAggregateTarget "amalgamation" */;
-			buildPhases = (
-				9069D08A0FCE185A0042E34C /* ShellScript */,
-			);
-			dependencies = (
-			);
-			name = amalgamation;
-			productName = amalgamation;
-		};
-/* End PBXAggregateTarget section */
-
 /* Begin PBXBuildFile section */
 		4C0041A61BFC3A5000ED2AD5 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4C0041A51BFC3A5000ED2AD5 /* Security.framework */; };
 		4C0041AB1BFC3A7E00ED2AD5 /* SQLCipher.h in Headers */ = {isa = PBXBuildFile; fileRef = 4C0041A91BFC3A7E00ED2AD5 /* SQLCipher.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -39,44 +25,6 @@
 		4C0042011BFC474800ED2AD5 /* sqlite3.c in Sources */ = {isa = PBXBuildFile; fileRef = 9069D0A20FCE1A4D0042E34C /* sqlite3.c */; };
 		9069D0A30FCE1A4D0042E34C /* sqlite3.c in Sources */ = {isa = PBXBuildFile; fileRef = 9069D0A20FCE1A4D0042E34C /* sqlite3.c */; };
 /* End PBXBuildFile section */
-
-/* Begin PBXContainerItemProxy section */
-		289BE0E7180C4930003E52DA /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 08FB7793FE84155DC02AAC07 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 9069D08B0FCE185A0042E34C;
-			remoteInfo = amalgamation;
-		};
-		4C0041A11BFC392D00ED2AD5 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 08FB7793FE84155DC02AAC07 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 9069D08B0FCE185A0042E34C;
-			remoteInfo = amalgamation;
-		};
-		4C0041B91BFC3C6E00ED2AD5 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 08FB7793FE84155DC02AAC07 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 9069D08B0FCE185A0042E34C;
-			remoteInfo = amalgamation;
-		};
-		4C0041CB1BFC3D3000ED2AD5 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 08FB7793FE84155DC02AAC07 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 9069D08B0FCE185A0042E34C;
-			remoteInfo = amalgamation;
-		};
-		4C0041DE1BFC3F0100ED2AD5 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 08FB7793FE84155DC02AAC07 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 9069D08B0FCE185A0042E34C;
-			remoteInfo = amalgamation;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		4C0041981BFC382400ED2AD5 /* SQLCipher.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SQLCipher.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -252,7 +200,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				4C0041A21BFC392D00ED2AD5 /* PBXTargetDependency */,
 			);
 			name = "SQLCipher iOS";
 			productName = SQLCipher;
@@ -271,7 +218,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				4C0041BA1BFC3C6E00ED2AD5 /* PBXTargetDependency */,
 			);
 			name = "SQLCipher OSX";
 			productName = "SQLCipher OSX";
@@ -290,7 +236,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				4C0041CC1BFC3D3000ED2AD5 /* PBXTargetDependency */,
 			);
 			name = "SQLCipher tvOS";
 			productName = "SQLCipher tvOS";
@@ -309,7 +254,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				4C0041DF1BFC3F0100ED2AD5 /* PBXTargetDependency */,
 			);
 			name = "SQLCipher watchOS";
 			productName = SQLCipher;
@@ -327,7 +271,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				289BE0E8180C4930003E52DA /* PBXTargetDependency */,
 			);
 			name = sqlcipher;
 			productName = sqlcipher;
@@ -376,7 +319,6 @@
 				4C0041C21BFC3CC000ED2AD5 /* SQLCipher tvOS */,
 				4C0041D51BFC3E2500ED2AD5 /* SQLCipher watchOS */,
 				D2AAC045055464E500DB518D /* sqlcipher */,
-				9069D08B0FCE185A0042E34C /* amalgamation */,
 			);
 		};
 /* End PBXProject section */
@@ -411,23 +353,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		9069D08A0FCE185A0042E34C /* ShellScript */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			outputPaths = (
-				"$(SRCROOT)/sqlite3.c",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "./configure --with-tempstore=yes CFLAGS=\"-DSQLITE_HAS_CODEC -DSQLITE_TEMP_STORE=2 -DSQLITE_SOUNDEX -DSQLITE_THREADSAFE -DSQLITE_ENABLE_RTREE -DSQLITE_ENABLE_STAT3 -DSQLITE_ENABLE_STAT4 -DSQLITE_ENABLE_COLUMN_METADATA -DSQLITE_ENABLE_MEMORY_MANAGEMENT -DSQLITE_ENABLE_LOAD_EXTENSION -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS4_UNICODE61 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_UNLOCK_NOTIFY -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_FTS5 -DSQLCIPHER_CRYPTO_CC -DHAVE_USLEEP=1 -DSQLITE_MAX_VARIABLE_NUMBER=99999 -DSQLITE_EXTRA_INIT=sqlcipher_extra_init -DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown\"\nmake sqlite3.c\nexit 0\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4C0041931BFC382400ED2AD5 /* Sources */ = {
@@ -471,34 +396,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		289BE0E8180C4930003E52DA /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 9069D08B0FCE185A0042E34C /* amalgamation */;
-			targetProxy = 289BE0E7180C4930003E52DA /* PBXContainerItemProxy */;
-		};
-		4C0041A21BFC392D00ED2AD5 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 9069D08B0FCE185A0042E34C /* amalgamation */;
-			targetProxy = 4C0041A11BFC392D00ED2AD5 /* PBXContainerItemProxy */;
-		};
-		4C0041BA1BFC3C6E00ED2AD5 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 9069D08B0FCE185A0042E34C /* amalgamation */;
-			targetProxy = 4C0041B91BFC3C6E00ED2AD5 /* PBXContainerItemProxy */;
-		};
-		4C0041CC1BFC3D3000ED2AD5 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 9069D08B0FCE185A0042E34C /* amalgamation */;
-			targetProxy = 4C0041CB1BFC3D3000ED2AD5 /* PBXContainerItemProxy */;
-		};
-		4C0041DF1BFC3F0100ED2AD5 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 9069D08B0FCE185A0042E34C /* amalgamation */;
-			targetProxy = 4C0041DE1BFC3F0100ED2AD5 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		1DEB91EC08733DB70010E9CD /* Debug */ = {
@@ -1473,38 +1370,6 @@
 			};
 			name = Release;
 		};
-		9069D08C0FCE185A0042E34C /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				COMBINE_HIDPI_IMAGES = YES;
-				COPY_PHASE_STRIP = NO;
-				DEAD_CODE_STRIPPING = YES;
-				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
-				PRODUCT_NAME = amalgamation;
-				SDKROOT = macosx;
-				SUPPORTED_PLATFORMS = macosx;
-			};
-			name = Debug;
-		};
-		9069D08D0FCE185A0042E34C /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				COMBINE_HIDPI_IMAGES = YES;
-				COPY_PHASE_STRIP = YES;
-				DEAD_CODE_STRIPPING = YES;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
-				PRODUCT_NAME = amalgamation;
-				SDKROOT = macosx;
-				SUPPORTED_PLATFORMS = macosx;
-				ZERO_LINK = NO;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1558,15 +1423,6 @@
 			buildConfigurations = (
 				4C0041DC1BFC3E2600ED2AD5 /* Debug */,
 				4C0041DD1BFC3E2600ED2AD5 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		9069D0900FCE18970042E34C /* Build configuration list for PBXAggregateTarget "amalgamation" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				9069D08C0FCE185A0042E34C /* Debug */,
-				9069D08D0FCE185A0042E34C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
