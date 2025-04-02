@@ -175,6 +175,12 @@ static void attachFunc(
       sqlite3_free(zErr);
       return;
     }
+    if( (db->flags & SQLITE_AttachWrite)==0 ){
+      flags &= ~(SQLITE_OPEN_CREATE|SQLITE_OPEN_READWRITE);
+      flags |= SQLITE_OPEN_READONLY;
+    }else if( (db->flags & SQLITE_AttachCreate)==0 ){
+      flags &= ~SQLITE_OPEN_CREATE;
+    }
     assert( pVfs );
     flags |= SQLITE_OPEN_MAIN_DB;
     rc = sqlite3BtreeOpen(pVfs, zPath, db, &pNew->pBt, 0, flags);
@@ -216,6 +222,7 @@ static void attachFunc(
   if( rc==SQLITE_OK ){
     extern int sqlcipherCodecAttach(sqlite3*, int, const void*, int);
     extern void sqlcipherCodecGetKey(sqlite3*, int, void**, int*);
+    extern void sqlcipher_free(void*, sqlite3_uint64);
     int nKey;
     char *zKey;
     int t = sqlite3_value_type(argv[2]);
@@ -230,7 +237,14 @@ static void attachFunc(
       case SQLITE_BLOB:
         nKey = sqlite3_value_bytes(argv[2]);
         zKey = (char *)sqlite3_value_blob(argv[2]);
-        rc = sqlcipherCodecAttach(db, db->nDb-1, zKey, nKey);
+        /* SQLCipher allows a special case to attach a plaintext database
+         * to an encrypted database by passing key as an empty string, eg.
+         *    ATTACH DATABASE 'plain.db' AS plain KEY '';
+         * In this case, do not attempt to attach a codec to the attached
+         * database */
+        if(nKey && zKey) {
+          rc = sqlcipherCodecAttach(db, db->nDb-1, zKey, nKey);
+        }
         break;
 
       case SQLITE_NULL:
@@ -241,6 +255,7 @@ static void attachFunc(
           if( nKey || sqlite3BtreeGetRequestedReserve(db->aDb[0].pBt)>0 ){
             rc = sqlcipherCodecAttach(db, db->nDb-1, zKey, nKey);
           }
+          if(nKey) sqlcipher_free(zKey, nKey);
         }
         break;
     }
@@ -264,15 +279,6 @@ static void attachFunc(
     sqlite3BtreeLeaveAll(db);
     assert( zErrDyn==0 || rc!=SQLITE_OK );
   }
-#ifdef SQLITE_USER_AUTHENTICATION
-  if( rc==SQLITE_OK && !REOPEN_AS_MEMDB(db) ){
-    u8 newAuth = 0;
-    rc = sqlite3UserAuthCheckLogin(db, zName, &newAuth);
-    if( newAuth<db->auth.authLevel ){
-      rc = SQLITE_AUTH_USER;
-    }
-  }
-#endif
   if( rc ){
     if( ALWAYS(!REOPEN_AS_MEMDB(db)) ){
       int iDb = db->nDb - 1;
@@ -516,20 +522,21 @@ static int fixSelectCb(Walker *p, Select *pSelect){
 
   if( NEVER(pList==0) ) return WRC_Continue;
   for(i=0, pItem=pList->a; i<pList->nSrc; i++, pItem++){
-    if( pFix->bTemp==0 ){
-      if( pItem->zDatabase ){
-        if( iDb!=sqlite3FindDbName(db, pItem->zDatabase) ){
+    if( pFix->bTemp==0 && pItem->fg.isSubquery==0 ){
+      if( pItem->fg.fixedSchema==0 && pItem->u4.zDatabase!=0 ){
+        if( iDb!=sqlite3FindDbName(db, pItem->u4.zDatabase) ){
           sqlite3ErrorMsg(pFix->pParse,
               "%s %T cannot reference objects in database %s",
-              pFix->zType, pFix->pName, pItem->zDatabase);
+              pFix->zType, pFix->pName, pItem->u4.zDatabase);
           return WRC_Abort;
         }
-        sqlite3DbFree(db, pItem->zDatabase);
-        pItem->zDatabase = 0;
+        sqlite3DbFree(db, pItem->u4.zDatabase);
         pItem->fg.notCte = 1;
+        pItem->fg.hadSchema = 1;
       }
-      pItem->pSchema = pFix->pSchema;
+      pItem->u4.pSchema = pFix->pSchema;
       pItem->fg.fromDDL = 1;
+      pItem->fg.fixedSchema = 1;
     }
 #if !defined(SQLITE_OMIT_VIEW) || !defined(SQLITE_OMIT_TRIGGER)
     if( pList->a[i].fg.isUsing==0

@@ -1,4 +1,5 @@
 #!/bin/sh
+./configure && make sqlite3.c
 xcodebuild BITCODE_GENERATION_MODE=bitcode OTHER_CFLAGS="\$(inherited) -fembed-bitcode" ARCHS="arm64 arm64e" ONLY_ACTIVE_ARCH=NO PLATFORM_NAME=iphoneos -configuration Release -project sqlcipher.xcodeproj -target sqlcipher clean install
 if [ -f "build/UninstalledProducts/iphoneos/libsqlcipher.a" ]; then
 	mv build/UninstalledProducts/iphoneos/libsqlcipher.a libsqlcipher-iphoneos.a
